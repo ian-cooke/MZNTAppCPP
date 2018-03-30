@@ -10,6 +10,7 @@
 
 #include <queue>
 #include <pthread.h>
+#include "ThreadSafeQueue.h"
 
 class HardwareManager {
 public:
@@ -18,7 +19,12 @@ public:
 
 	bool InitializeHardware( const char *conf_filename);
 
+	bool Begin();
+
+	bool Stop();
+
 	void *HWThread(void);
+	void *WriterThread(void);
 
 
 	// This is for launching the HW Thread within the context of this class.
@@ -30,8 +36,11 @@ public:
 		return ((HardwareManager*)context)->HWThread();
 	}
 
-	std::queue <unsigned long*> GetQueue(){
-		return m_dataQueue;
+	static void *WriterThread_Helper(void *context){
+		if(!context){
+			return NULL;
+		}
+		return ((HardwareManager*) context)->WriterThread();
 	}
 
 private:
@@ -47,14 +56,20 @@ private:
 	unsigned long *mmapDDR( size_t length, off_t offset, volatile unsigned long **pageStart );
 
 	const char *m_conf_filename;
+	const char *m_IF_baseName;
+	const char *m_AGC_fileName;
 	bool m_counterOn;
 	bool m_resamplingOn;
 	uint32_t m_resampThreshold;
 	bool m_initialized;
 	int m_numErrors;
 
-	pthread_mutex_t						m_queueMutex;
-	std::queue <unsigned long*> m_dataQueue;
+	pthread_t m_hwThread;
+	pthread_t m_writerThread;
+	bool m_stopSignal;
+
+	//std::queue <char*> m_dataQueue;
+	ThreadSafeQueue m_dataQueue;
 
 	volatile unsigned long *m_ddrBase;
 	volatile unsigned long *m_ddrBaseOff;

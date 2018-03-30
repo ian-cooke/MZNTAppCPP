@@ -6,7 +6,7 @@
  *
  */
 #include <iostream>
-
+#include <unistd.h>
 #include "HardwareManager.h"
 
 using namespace std;
@@ -21,6 +21,16 @@ int main()
 	} else {
 		cout << "Hardware initialization successful." << endl;
 	}
+
+	if(! hwMgr.Begin() ){
+		cerr<<"HW Thread init failed." << endl;
+	}
+
+	sleep(5);
+
+	hwMgr.Stop();
+
+	cout << "Exiting." << endl;
 
 	return 0;
 }
