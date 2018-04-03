@@ -7,30 +7,23 @@
  */
 #include <iostream>
 #include <unistd.h>
-#include "HardwareManager.h"
+#include "LoggerController.h"
 
 using namespace std;
 
 int main()
 {
-	HardwareManager hwMgr;
+	LoggerController logger("mz1", "/mnt/mz1.IF.bin");
 
-	if(! hwMgr.InitializeHardware("/etc/ConfigSet10.txt") ){
-		cerr<<"Hardware Initialization failed." <<endl;
-		return -1;
-	} else {
-		cout << "Hardware initialization successful." << endl;
+	if(!logger.Start()) {
+		cout << "Starting." << endl;
 	}
 
-	if(! hwMgr.Begin() ){
-		cerr<<"HW Thread init failed." << endl;
+	sleep(60);
+
+	if(!logger.Stop()) {
+		cout << "Stopping." << endl;
 	}
-
-	sleep(5);
-
-	hwMgr.Stop();
-
-	cout << "Exiting." << endl;
 
 	return 0;
 }
