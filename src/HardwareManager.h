@@ -9,12 +9,17 @@
 #define SRC_HARDWAREMANAGER_H_
 
 #include <queue>
+#include <iostream>
 #include <pthread.h>
+#include <unistd.h>
+#include <string>
 #include "ThreadSafeQueue.h"
+
+using namespace std;
 
 class HardwareManager {
 public:
-	HardwareManager();
+	HardwareManager( string if_outFilename );
 	virtual ~HardwareManager();
 
 	bool InitializeHardware( const char *conf_filename);
@@ -43,6 +48,8 @@ public:
 		return ((HardwareManager*) context)->WriterThread();
 	}
 
+	unsigned long GetBytesWritten() { return m_bytesWritten; }
+
 private:
 	bool ConfigureNT1065(bool verbose);
 
@@ -56,7 +63,7 @@ private:
 	unsigned long *mmapDDR( size_t length, off_t offset, volatile unsigned long **pageStart );
 
 	const char *m_conf_filename;
-	const char *m_IF_baseName;
+	string m_IF_baseName;
 	const char *m_AGC_fileName;
 	bool m_counterOn;
 	bool m_resamplingOn;
@@ -67,6 +74,9 @@ private:
 	pthread_t m_hwThread;
 	pthread_t m_writerThread;
 	bool m_stopSignal;
+	bool m_breakFileSignal;
+
+	unsigned long m_bytesWritten;
 
 	//std::queue <char*> m_dataQueue;
 	ThreadSafeQueue m_dataQueue;

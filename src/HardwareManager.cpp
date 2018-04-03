@@ -10,15 +10,16 @@
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include <cstdint>
+#include <string>
 #include <string.h>
 #include <sys/mman.h>
 #include <queue>
 #include <iostream>
 #include <pthread.h>
-//#include <sched.h>
-//#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <unistd.h>
+#include <fstream>
 
 #include "HardwareManager.h"
 #include "system_defines.h"
@@ -26,7 +27,7 @@
 
 using namespace std;
 
-HardwareManager::HardwareManager() : m_dataQueue(300)
+HardwareManager::HardwareManager( string if_outFilename ) : m_dataQueue(300)
 {
 	// Initialize all member variables to default values.
 	m_conf_filename = "/etc/ConfigSet10.txt";
@@ -36,14 +37,17 @@ HardwareManager::HardwareManager() : m_dataQueue(300)
 	m_initialized = false;
 
 	m_AGC_fileName = "/mnt/AGC.bin";
-	m_IF_baseName = "/mnt/IF";
+	m_IF_baseName = if_outFilename;
 
 	m_stopSignal = false;
+	m_breakFileSignal = false;
 
 	m_ddrBase = m_ddrBaseOff = NULL;
 	m_cdmaBase = m_cdmaBaseOff = NULL;
 	m_intrBase = m_intrBaseOff = NULL;
 	m_paddr_dmaTarget = 0;
+
+	m_bytesWritten = 0;
 }
 
 HardwareManager::~HardwareManager()
@@ -77,6 +81,12 @@ HardwareManager::~HardwareManager()
 	}
 }
 
+//--------------------------------------------------------------------------------------------------------------
+// HW Thread
+// requires class initialized
+// actions: DMA Management thread loop
+// Modifies: m_dataQueue
+//-------------------------------------------------------------------------------------------------------------
 void *HardwareManager::HWThread()
 {
 	cout << "In HW thread." << endl;
@@ -188,30 +198,47 @@ void *HardwareManager::HWThread()
 	return NULL;
 }
 
+//--------------------------------------------------------------------------------------------------------------
+// Writerthread
+// requires: class initialized
+// actions: Performs continuous polling of shared data queue and writing to file.
+// Modifies: m_dataQueue
+// returns: true on success, false otherwise.
+//-------------------------------------------------------------------------------------------------------------
 void *HardwareManager::WriterThread()
 {
 	cout << "In writer thread." << endl;
 
+	// Open the IF data file.
+	/*FILE *writeFile = fopen(m_IF_baseName, "wb");
+	if (writeFile == NULL)
+	{
+		cerr << "Could not open the IF data output file." << endl;
+		return NULL;
+	}*/
+
+	ofstream outputFile;
+	outputFile.open( m_IF_baseName.c_str(), ios::out | ios::binary );
+
 	while (!m_stopSignal)
 	{
-		// Open the IF data file.
-		FILE *writeFile = fopen(m_IF_baseName, "wb");
-		if (writeFile == NULL)
-		{
-			cerr << "Could not open the IF data output file." << endl;
-			return NULL;
-		}
 
 		// Get the first data.
 		char *nextData = m_dataQueue.pop_front();
 
-
 		// If we get null data stop.
 		// This is a stop signal.
-		if(nextData == NULL) {
+		if (nextData == NULL)
+		{
 			break;
 		}
+
+		outputFile.write(nextData, BUFFER_BYTESIZE);
+		m_bytesWritten += BUFFER_BYTESIZE;
 	}
+
+	//fclose(writeFile);
+	outputFile.close();
 
 	cout << "Writer thread exiting." << endl;
 
@@ -309,9 +336,10 @@ bool HardwareManager::Stop()
 	m_stopSignal = true;
 
 	// Join the hardware thread first.
-	// This could fail if the writer thread is not pulling data 
+	// This could fail if the writer thread is not pulling data
 	// out of the queue.
-	if(m_dataQueue.size() == 300){
+	if (m_dataQueue.size() == 300)
+	{
 		m_dataQueue.pop_front();
 	}
 	pthread_join(m_hwThread, NULL);
@@ -320,7 +348,7 @@ bool HardwareManager::Stop()
 
 	// Join the writer thread.
 	// Push NULL to to tell it no more data is coming.
-	m_dataQueue.push( NULL );
+	m_dataQueue.push(NULL);
 	pthread_join(m_writerThread, NULL);
 
 	cout << " Writer thread stopped." << endl;

@@ -1,0 +1,6 @@
+[submodule "src/MZNT_http"]
+	path = src/MZNT_http
+	url = https://github.com/alexander-ray/MZNT_http.git
+[submodule "MZNT_http"]
+	path = MZNT_http
+	url = https://github.com/alexander-ray/MZNT_http.git
