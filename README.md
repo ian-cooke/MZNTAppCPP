@@ -14,17 +14,17 @@
 2. Command line options as follows, along with their defaults if they are not specified. Flags are by default, off.
 
 Most important:
-  * -o <output path> Default: /mnt/IF.bin
-  * -s <num seconds to run> Default: 3600 (1hr)
-  * -h <http host ip or domain name>
-  * -p <http port>
-  * -m <mqtt host ip or domain name>
-  * -P (capital P) <mqtt port>
-  * -u <Periodic/Normal Update Upload size in MB>
+  * -o output path Default: /mnt/IF.bin
+  * -s num seconds to run Default: 3600 (1hr)
+  * -h http host ip or domain name
+  * -p http port
+  * -m mqtt host ip or domain name
+  * -P (capital P) mqtt port
+  * -u Periodic/Normal Update Upload size in MB
 
 Secondary:
-  * -c <path to config file> Default: /etc/ConfigSet10.txt
-  * -t <threshold for resampling, given as hex> Default: 0x04000000
+  * -c path to config fil Default: /etc/ConfigSet10.txt
+  * -t threshold for resampling, given as hex Default: 0x04000000
   * -a Flag to turn on the counter instead of RF data.
   * -n Flag to turn off resampling. (generally don't touch)
 
