@@ -27,10 +27,9 @@
 
 using namespace std;
 
-HardwareManager::HardwareManager( string if_outFilename ) : m_dataQueue(300)
+HardwareManager::HardwareManager(string if_outFilename, string conf_filename) : m_dataQueue(300)
 {
 	// Initialize all member variables to default values.
-	m_conf_filename = "/etc/ConfigSet10.txt";
 	m_counterOn = false;
 	m_resamplingOn = true;
 	m_resampThreshold = 0x04000000;
@@ -48,6 +47,8 @@ HardwareManager::HardwareManager( string if_outFilename ) : m_dataQueue(300)
 	m_paddr_dmaTarget = 0;
 
 	m_bytesWritten = 0;
+
+	m_conf_filename = conf_filename;
 }
 
 HardwareManager::~HardwareManager()
@@ -97,15 +98,26 @@ void *HardwareManager::HWThread()
 	unsigned long queuePos = DDR_BASE_WRITE_ADDRESS;
 	unsigned long queueIndex = 0;
 	unsigned long errorCnt = 0;
+	unsigned long loopCnt = 0;
 
 	while (!m_stopSignal)
 	{
 		// Busy poll the interrupt.
 		do
 		{
+			//cout << "waiting for interrupt." << endl;
 			regValue = *(volatile unsigned long *)((char *)m_intrBaseOff + AXIINTC_ISR_OFFSET);
 			usleep(10);
+			if(m_stopSignal) {
+				break;
+			}
 		} while (!(regValue & BUFINT01_ISR_MASK));
+
+		if(m_stopSignal) {
+			break;
+		}
+
+		// cout << "Conducting transfer." << endl;
 
 		/* Choose which BRAM to tranfer data from */
 		if (regValue & BUFINT0_ISR_MASK)
@@ -174,7 +186,7 @@ void *HardwareManager::HWThread()
 		*(volatile unsigned long *)((char *)m_cdmaBaseOff + XAXICDMA_SRCADDR_OFFSET) = BRAM_BASE_ADDRESS + bufferNum * BUFFER_BYTESIZE;
 
 		// Set the destination address. This is based on the physical address provided by the dmaTarget.
-		queuePos = (unsigned long)m_ddrBaseOff + queueIndex * (unsigned long)BUFFER_BYTESIZE;
+		queuePos = (unsigned long)m_paddr_dmaTarget + queueIndex * (unsigned long)BUFFER_BYTESIZE;
 		*(volatile unsigned long *)((char *)m_cdmaBaseOff + XAXICDMA_DSTADDR_OFFSET) = queuePos; //if_data;
 
 		// Write number of bytes to transfer (this initiates the DMA)
@@ -186,14 +198,34 @@ void *HardwareManager::HWThread()
 			regValue = *(volatile unsigned long *)((char *)m_cdmaBaseOff + XAXICDMA_SR_OFFSET);
 		} while (!(regValue & XAXICDMA_SR_IDLE_MASK));
 
+
+		/*** Print DMA transfer status ***/
+		if ((regValue & XAXICDMA_XR_IRQ_IOC_MASK))
+		{
+			//printf("Transfer Completed \n\r ");
+		}
+		else if ((regValue & XAXICDMA_XR_IRQ_DELAY_MASK))
+		{
+			fprintf(stderr, "GT: IRQ Delay Interrupt\n\r ");
+			break;
+		}
+		else if ((regValue & XAXICDMA_XR_IRQ_ERROR_MASK))
+		{
+			fprintf(stderr, "GT: Transfer Error Interrupt\n\r ");
+			break;
+		}
+
 		// Add the pointer to the queue.
 		m_dataQueue.push(((char *)m_ddrBaseOff + queueIndex * BUFFER_BYTESIZE));
 
 		// Inc queue index
 		queueIndex = (queueIndex + 1) % DDR_Q_SIZE;
+
+		loopCnt++;
 	}
 
 	cout << "Exiting." << endl;
+	cout << "Number of intr serviced: " << (int)loopCnt << endl;
 	cout << "Error cnt: " << errorCnt << endl;
 	return NULL;
 }
@@ -218,7 +250,7 @@ void *HardwareManager::WriterThread()
 	}*/
 
 	ofstream outputFile;
-	outputFile.open( m_IF_baseName.c_str(), ios::out | ios::binary );
+	outputFile.open(m_IF_baseName.c_str(), ios::out | ios::binary);
 
 	while (!m_stopSignal)
 	{
@@ -253,19 +285,19 @@ void *HardwareManager::WriterThread()
 // returns: true on success, false otherwise.
 //
 //-------------------------------------------------------------------------------------------------------------
-bool HardwareManager::InitializeHardware(const char *conf_filename)
+bool HardwareManager::InitializeHardware()
 {
-	m_conf_filename = conf_filename;
-
 	// Uploads hex settings to NT1065 chip via SPI module located on FPGA
 	if (!ConfigureNT1065(false))
 	{
+		cerr << "Failed to init NT1065 through SPI." << endl;
 		return false;
 	}
 
 	// Configures resampling, counter
 	if (!ConfigureFPGASettings())
 	{
+		cerr << "Failed to set FPGA settings." << endl;
 		return false;
 	}
 
@@ -301,9 +333,12 @@ bool HardwareManager::InitializeHardware(const char *conf_filename)
 		return false;
 	}
 
+	cout << "Physical Address target: " << hex<< (unsigned long)m_paddr_dmaTarget << endl;
+
 	// This turns on interrupts from the FPGA
 	if (!EnableAXI_Interrupts())
 	{
+		cerr << "Failed to turn on AXI interrupts." << endl;
 		return false;
 	}
 
@@ -319,8 +354,9 @@ bool HardwareManager::InitializeHardware(const char *conf_filename)
 // Modifies: thread
 // returns: true on success, false otherwise.
 //-------------------------------------------------------------------------------------------------------------
-bool HardwareManager::Begin()
+bool HardwareManager::Start()
 {
+
 	pthread_create(&m_hwThread, NULL, HardwareManager::HWThread_Helper, (void *)this);
 
 	pthread_create(&m_writerThread, NULL, HardwareManager::WriterThread_Helper, (void *)this);
@@ -337,11 +373,14 @@ bool HardwareManager::Stop()
 
 	// Join the hardware thread first.
 	// This could fail if the writer thread is not pulling data
-	// out of the queue.
-	if (m_dataQueue.size() == 300)
+	// out of the queue (hw thread is sleeping)
+	while (m_dataQueue.size() >= 300)
 	{
 		m_dataQueue.pop_front();
 	}
+
+	cout << "Waiting for HW thread." <<endl;
+
 	pthread_join(m_hwThread, NULL);
 
 	cout << "HW Thread stopped." << endl;
@@ -369,7 +408,7 @@ bool HardwareManager::Stop()
 bool HardwareManager::ParseNTConfig(volatile uint32_t *SpiWrBuffer)
 {
 	// require our configuration filename to be set.
-	if (!m_conf_filename)
+	if (m_conf_filename == "")
 	{
 		return false;
 	}
@@ -385,10 +424,10 @@ bool HardwareManager::ParseNTConfig(volatile uint32_t *SpiWrBuffer)
 	uint32_t i = 0;
 
 	FILE *conf_file;
-	conf_file = fopen(m_conf_filename, "rb");
+	conf_file = fopen(m_conf_filename.c_str(), "rb");
 	if (conf_file == NULL)
 	{
-		fprintf(stderr, "Failed to open configuration file %s\n", m_conf_filename);
+		fprintf(stderr, "Failed to open configuration file %s\n", m_conf_filename.c_str());
 		return false;
 	}
 
@@ -431,7 +470,7 @@ bool HardwareManager::ParseNTConfig(volatile uint32_t *SpiWrBuffer)
 //-----------------------------------------------------------------------------
 bool HardwareManager::ConfigureNT1065(bool verbose)
 {
-	if (!m_conf_filename)
+	if (m_conf_filename == "")
 	{
 		return false;
 	}
@@ -496,14 +535,14 @@ bool HardwareManager::ConfigureNT1065(bool verbose)
 	if (memfd_2 == -1)
 	{
 		printf("Can't open /dev/mem.\n");
-		exit(0);
+		return false;
 	}
 
 	mapped_base_2 = (uint32_t *)mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, memfd_2, dev_base_2 & ~MAP_MASK);
 	if (mapped_base_2 == (void *)-1)
 	{
 		printf("Can't map the memory(spi_base_2) to user space.\n");
-		exit(0);
+		return false;
 	}
 	mapped_spi_read = mapped_base_2 + (dev_base_2 & MAP_MASK);
 
@@ -526,8 +565,8 @@ bool HardwareManager::ConfigureNT1065(bool verbose)
 
 	// Give Write instruction
 	*mapped_spi_base = 0x00000002;
-	usleep(10);
-	//printf("---Programming RF---\n");
+	usleep(100);
+	printf("---Programming RF---\n");
 	*mapped_spi_base = 0x00000000;
 
 	// Wait till Busy goes low
@@ -543,8 +582,8 @@ bool HardwareManager::ConfigureNT1065(bool verbose)
 	} while (0x00000008 & RegValue);
 
 	*mapped_spi_base = 0x00000004;
-	//printf("---Reading RF---\n");
-	usleep(10);
+	printf("---Reading RF---\n");
+	usleep(100);
 	*mapped_spi_base = 0x00000000;
 
 	// Wait till Busy goes low
@@ -592,7 +631,7 @@ bool HardwareManager::ConfigureNT1065(bool verbose)
 	if (munmap((void *)mapped_base_2, MAP_SIZE) == -1)
 	{
 		printf("Can't unmap SPI memory buffer.\n");
-		return -1;
+		return false;
 	}
 
 	close(memfd_2);
@@ -801,6 +840,7 @@ bool HardwareManager::EnableAXI_Interrupts()
 		if (munmap((void *)pageStart, MAP_SIZE) == -1)
 		{
 			cerr << "Failed to release mmap to DDR" << endl;
+			return false;
 		}
 	}
 

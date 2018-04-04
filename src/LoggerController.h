@@ -15,7 +15,11 @@ using namespace std;
 
 class LoggerController : public MQTTMsgHandler {
 public:
-    LoggerController( string nodeName, string ifFilename );
+    LoggerController( string nodeName, string ifFilename, 
+                      string config_filename, unsigned long numUpdateBytes, unsigned long numPreBytes,
+                      unsigned long numPostBytes, unsigned long uploadRefactorySec,
+                      string http_host, int http_port,
+                      string mqtt_host, int mqtt_port );
     ~LoggerController();
 
     int MQTT_Callback( void * context, char *topicName, int topicLen, MQTTClient_message *message );
@@ -30,10 +34,17 @@ private:
     HardwareManager m_hwMgr;
     string m_nodeName;
     string m_ifFilename;
+    string m_http_host;
+    string m_mqtt_host;
+    int m_http_port;
+    int m_mqtt_port;
     bool m_uploading;
     unsigned long m_numEvents;
+    unsigned long m_numUpdates;
     unsigned long m_numPreBytes;
+    unsigned long m_numUpdateBytes;
     unsigned long m_numPostBytes;
+    unsigned long m_uploadRefactory;
 };
 
 #endif

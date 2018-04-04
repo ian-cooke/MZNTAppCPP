@@ -51,8 +51,9 @@ start)
 	then
         echo "MZNT Startup: Network good."
 	else
+		echo "MZNT Startup: Network not found. Disabling network features."
 		# turn off write to network
-		# set options for no HTTP upload / MQTT
+		# set options for no HTTP upload and MQTT
 	fi
 
 	# create the log folder

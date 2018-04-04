@@ -19,12 +19,10 @@ using namespace std;
 
 class HardwareManager {
 public:
-	HardwareManager( string if_outFilename );
+	HardwareManager( string if_outFilename, string conf_filename );
 	virtual ~HardwareManager();
 
-	bool InitializeHardware( const char *conf_filename);
-
-	bool Begin();
+	bool Start();
 
 	bool Stop();
 
@@ -49,8 +47,11 @@ public:
 	}
 
 	unsigned long GetBytesWritten() { return m_bytesWritten; }
+	bool InitializeHardware();
+
 
 private:
+
 	bool ConfigureNT1065(bool verbose);
 
 	bool ParseNTConfig(  volatile uint32_t * SpiWrBuffer);
@@ -62,7 +63,6 @@ private:
 	unsigned long *mmapDMABuffer( size_t length, unsigned long *phys_address );
 	unsigned long *mmapDDR( size_t length, off_t offset, volatile unsigned long **pageStart );
 
-	const char *m_conf_filename;
 	string m_IF_baseName;
 	const char *m_AGC_fileName;
 	bool m_counterOn;
@@ -77,6 +77,8 @@ private:
 	bool m_breakFileSignal;
 
 	unsigned long m_bytesWritten;
+
+	string m_conf_filename;
 
 	//std::queue <char*> m_dataQueue;
 	ThreadSafeQueue m_dataQueue;
