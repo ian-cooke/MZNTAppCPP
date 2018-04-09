@@ -1,8 +1,7 @@
 *.elf*
 *.o
 *.d
-.project
-.cproject
 .vscode
 .settings
 .metadata
+*.bin
