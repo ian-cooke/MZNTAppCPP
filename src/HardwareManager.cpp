@@ -4,7 +4,7 @@
  *  Created on: Mar 14, 2018
  *      Author: chris
  */
-#include <cstdio>
+//#include <cstdio>
 #include <cstdlib>
 #include <sys/types.h>
 #include <sys/fcntl.h>
@@ -20,6 +20,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #include <fstream>
+#include <chrono>
 
 #include "HardwareManager.h"
 #include "system_defines.h"
@@ -27,10 +28,10 @@
 
 using namespace std;
 
-HardwareManager::HardwareManager(string if_outFilename, string conf_filename) : m_dataQueue(300)
+HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bool counterOn) : m_dataQueue(300)
 {
 	// Initialize all member variables to default values.
-	m_counterOn = true;
+	m_counterOn = counterOn;
 	m_resamplingOn = true;
 	m_resampThreshold = 0x04000000;
 	m_initialized = false;
@@ -201,14 +202,14 @@ void *HardwareManager::HWThread()
 
 		if (!(regValue & XAXICDMA_SR_IDLE_MASK))
 		{
-			printf("GT: BUS IS BUSY Error Condition \n\r");
+			cerr << "GT: BUS IS BUSY Error Condition" << endl;
 			break;
 		}
 
 		// Ensure we don't overwrite the DDR Buffer.
 		while (m_dataQueue.size() == 300)
 		{
-			cout << "Queue full, wait for transfer." << endl;
+			cerr << "Queue full, wait for transfer." << endl;
 		}
 
 		// Set the source address - this is one of two buffers (hence the bufferNum*BUFFER_BYTESIZE)
@@ -234,12 +235,12 @@ void *HardwareManager::HWThread()
 		}
 		else if ((regValue & XAXICDMA_XR_IRQ_DELAY_MASK))
 		{
-			fprintf(stderr, "GT: IRQ Delay Interrupt\n\r ");
+			cerr << "GT: IRQ Delay Interrupt" << endl;
 			break;
 		}
 		else if ((regValue & XAXICDMA_XR_IRQ_ERROR_MASK))
 		{
-			fprintf(stderr, "GT: Transfer Error Interrupt\n\r ");
+			cerr << "GT: Transfer Error Interrupt" << endl;
 			break;
 		}
 
@@ -247,14 +248,18 @@ void *HardwareManager::HWThread()
 		m_dataQueue.push(((char *)m_ddrBaseOff + queueIndex * BUFFER_BYTESIZE));
 
 		// Inc queue index
-		queueIndex = (queueIndex + 1) % (DDR_Q_SIZE-2);
+		queueIndex = (queueIndex + 1) % (DDR_Q_SIZE);
+
+		if(loopCnt%500 == 0) {
+			cout <<"OK" << endl;
+		}
 
 		loopCnt++;
 	}
 
 	cout << "Exiting." << endl;
 	cout << "Number of intr serviced: " << (int)loopCnt << endl;
-	cout << "Error cnt: " << errorCnt << endl;
+	cout << "Error cnt: " << (int)errorCnt << endl;
 	return NULL;
 }
 
@@ -279,10 +284,16 @@ void *HardwareManager::WriterThread()
 
 	ofstream outputFile;
 	outputFile.open(m_IF_baseName.c_str(), ios::out | ios::binary);
+	static unsigned long lastBytesWritten = 0;
 
+	// Set the contiguous buffer we have in RAM to be a DMA target buffer
+	// The underlying UDMABUF driver will keep this portion of ram syncd with the cache
+	// Before we read from it.
+	SetSyncDir();
+	SetSyncSize(BUFFER_BYTESIZE);
+	auto startTime = chrono::steady_clock::now();
 	while (!m_stopSignal)
 	{
-
 		// Get the first data.
 		char *nextData = m_dataQueue.pop_front();
 
@@ -293,8 +304,24 @@ void *HardwareManager::WriterThread()
 			break;
 		}
 
+		// Sync all the cache's before we read.
+		SetSyncOffset( (unsigned long)nextData - (unsigned long)m_ddrBaseOff );
+		SyncForCPU();
+
 		outputFile.write(nextData, streamsize(BUFFER_BYTESIZE));
 		m_bytesWritten += BUFFER_BYTESIZE;
+		
+		auto currTime = chrono::steady_clock::now();
+
+		chrono::duration<double> elapsed = currTime - startTime;
+
+		unsigned long bytesDiff = (m_bytesWritten - lastBytesWritten)/1e6;
+
+		if((bytesDiff) >= 100) {
+			//cerr << "Writer thread average speed: " << ((double)bytesDiff)/(elapsed.count()) << " MB per second." << endl;
+			lastBytesWritten = m_bytesWritten;
+			startTime = chrono::steady_clock::now();
+		}
 	}
 
 	//fclose(writeFile);
@@ -970,4 +997,50 @@ bool HardwareManager::EnableAXI_Interrupts()
 	cout << "AXI Interrupts Initialized." << endl;
 
 	return true;
+}
+
+/*
+ * These are helper functions for the UDMABUF management
+ * They are used in the writer for ensuring cache is synchronized.
+ */
+void HardwareManager::SetSyncOffset(unsigned long offset){
+	static int fd = 0;
+	static char attr[1024];
+	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_offset",O_WRONLY)) != -1){
+		sprintf(attr,"%lu",offset);
+		write(fd,attr,strlen(attr));
+		close(fd);
+	}
+}
+
+void HardwareManager::SetSyncSize(unsigned int size){
+	static int fd = 0;
+	static char attr[1024];
+	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_size",O_WRONLY)) != -1){
+		sprintf(attr,"%u",size);
+		write(fd,attr,strlen(attr));
+		close(fd);
+	}
+}
+
+void HardwareManager::SetSyncDir(){
+	static int fd = 0;
+	static char attr[1024];
+	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_direction",O_WRONLY)) != -1){
+		sprintf(attr,"%d",2);
+		write(fd,attr,strlen(attr));
+		close(fd);
+	}
+}
+
+bool HardwareManager::SyncForCPU(){
+	static int fd = 0;
+	string one = "1";
+	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_for_cpu",O_WRONLY)) != -1){
+		write(fd,one.c_str(),one.length());
+		close(fd);
+		return true;
+	} else {
+		return false;
+	}
 }
