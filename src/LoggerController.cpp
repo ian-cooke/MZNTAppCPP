@@ -6,7 +6,7 @@
  */
 
 #include "LoggerController.h"
-#include "../MZNT_http/http-client.h"
+#include "HTTPClient.h"
 #include "system_defines.h"
 #include "HardwareManager.h"
 
@@ -28,7 +28,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 	m_agcFilename = agcFilename;
 
 	m_mqtt_port = mqtt_port;
-	m_http_port = mqtt_port;
+	m_http_port = http_port;
 
 	m_http_host = http_host;
 	m_mqtt_host = "tcp://" + mqtt_host + ":" + to_string(mqtt_port);
@@ -46,7 +46,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 
 LoggerController::~LoggerController()
 {
-	http_client_destroy();
+	//http_client_destroy();
 }
 
 //-----------------------------------------------------------------------
@@ -87,7 +87,7 @@ bool LoggerController::Start()
 	}
 
 	// Initialize HTTP upload.
-	if (http_client_init("gnssfast.colorado.edu", 1337) < 0)
+	if (m_httpClient.isInitialized() == false)
 	{
 		cerr << "Failed to initialize curl." << endl;
 	}
@@ -212,7 +212,7 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 		cout << "Starting upload of size " << fixed << (int)totalSize << " at offset " << fixed << (int)offset << endl;
 
 		// Upload Pre + Post chunk.
-		string remoteLocation = "/" + m_nodeName;
+		string remoteLocation = m_http_host + "/" + m_nodeName;
 		if (msgPayload == "start")
 		{
 			remoteLocation += ("/event" + to_string(m_numEvents) + ".bin");
@@ -223,12 +223,10 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 			remoteLocation += ("/update" + to_string(m_numUpdates) + ".bin");
 			m_numUpdates++;
 		}
-		int result = asynch_send(m_ifFilename.c_str(), offset, totalSize, remoteLocation.c_str());
-		if (result < 0)
+
+		if(!m_httpClient.upload(remoteLocation,m_ifFilename, m_http_port, offset, totalSize, true))
 		{
-			cerr << "Failed to start upload: " << endl;
-		} else {
-			cout << "Asynch upload started." << endl;
+			cerr << "Error uploading!" << endl;
 		}
 	}
 

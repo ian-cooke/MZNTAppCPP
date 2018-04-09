@@ -32,7 +32,7 @@ typedef struct AGCLogData
 class HardwareManager
 {
   public:
-	HardwareManager(string if_outFilename, string conf_filename);
+	HardwareManager(string if_outFilename, string conf_filename, bool counterOn);
 	virtual ~HardwareManager();
 
 	bool Start();
@@ -67,6 +67,8 @@ class HardwareManager
 	unsigned long GetBytesWritten() { return m_bytesWritten; }
 	bool InitializeHardware();
 
+	bool GetErrorState() { return (m_numErrors > 0); }
+
   private:
 	bool ConfigureNT1065(bool verbose);
 
@@ -79,7 +81,14 @@ class HardwareManager
 	unsigned long *mmapDMABuffer(size_t length, unsigned long *phys_address);
 	unsigned long *mmapDDR(size_t length, off_t offset, volatile unsigned long **pageStart);
 
+	// User DMA buf management
+	void SetSyncOffset(unsigned long offset);
+	void SetSyncSize(unsigned int size);
+	void SetSyncDir();
+	bool SyncForCPU();
+
 	string m_IF_baseName;
+	string m_udmaFilename;
 	const char *m_AGC_fileName;
 	bool m_counterOn;
 	bool m_resamplingOn;

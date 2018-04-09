@@ -49,6 +49,7 @@ HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bo
 	m_spiWrite = m_spiRead = m_spiBase = NULL;
 
 	m_bytesWritten = 0;
+	m_numErrors = 0;
 
 	m_conf_filename = conf_filename;
 }
@@ -125,7 +126,6 @@ void *HardwareManager::HWThread()
 	volatile unsigned long regValue;
 	unsigned long queuePos = DDR_BASE_WRITE_ADDRESS;
 	unsigned long queueIndex = 0;
-	unsigned long errorCnt = 0;
 	unsigned long loopCnt = 0;
 
 	while (!m_stopSignal)
@@ -178,7 +178,7 @@ void *HardwareManager::HWThread()
 			else
 			{
 				cerr << "ERROR: HW INTR MISSED." << endl;
-				errorCnt++;
+				m_numErrors++;
 				//continue;
 				break;
 			}
@@ -207,7 +207,7 @@ void *HardwareManager::HWThread()
 		}
 
 		// Ensure we don't overwrite the DDR Buffer.
-		while (m_dataQueue.size() == 300)
+		while (m_dataQueue.size() == DDR_Q_SIZE-2)
 		{
 			cerr << "Queue full, wait for transfer." << endl;
 		}
@@ -248,18 +248,18 @@ void *HardwareManager::HWThread()
 		m_dataQueue.push(((char *)m_ddrBaseOff + queueIndex * BUFFER_BYTESIZE));
 
 		// Inc queue index
-		queueIndex = (queueIndex + 1) % (DDR_Q_SIZE);
+		queueIndex = (queueIndex + 1) % (DDR_Q_SIZE-2);
 
-		if(loopCnt%500 == 0) {
+		/*if(loopCnt%200 == 0) {
 			cout <<"OK" << endl;
-		}
+		}*/
 
 		loopCnt++;
 	}
 
 	cout << "Exiting." << endl;
 	cout << "Number of intr serviced: " << (int)loopCnt << endl;
-	cout << "Error cnt: " << (int)errorCnt << endl;
+	cout << "Error cnt: " << (int)m_numErrors << endl;
 	return NULL;
 }
 
@@ -274,6 +274,25 @@ void *HardwareManager::WriterThread()
 {
 	cout << "In writer thread." << endl;
 
+	int res = 0;
+	struct sched_param params;
+	params.sched_priority = 90;
+
+	// Get the curent limit
+	struct rlimit limits;
+	getrlimit(RLIMIT_RTPRIO, &limits);
+
+	printf("This threads RT PRIO Cur: %ld, Max: %ld\n", limits.rlim_cur, limits.rlim_max);
+
+	res = pthread_setschedparam(pthread_self(), SCHED_RR, &params);
+
+	if (res != 0)
+	{
+		printf("WARNING: Failed to set thread RT policy and priority.\n");
+		printf("Errno: %d\n", errno);
+		return NULL;
+	}
+
 	// Open the IF data file.
 	/*FILE *writeFile = fopen(m_IF_baseName, "wb");
 	if (writeFile == NULL)
@@ -285,12 +304,13 @@ void *HardwareManager::WriterThread()
 	ofstream outputFile;
 	outputFile.open(m_IF_baseName.c_str(), ios::out | ios::binary);
 	static unsigned long lastBytesWritten = 0;
+	unsigned int blockSize = 1 * BUFFER_BYTESIZE;
 
 	// Set the contiguous buffer we have in RAM to be a DMA target buffer
 	// The underlying UDMABUF driver will keep this portion of ram syncd with the cache
 	// Before we read from it.
 	SetSyncDir();
-	SetSyncSize(BUFFER_BYTESIZE);
+	SetSyncSize(blockSize);
 	auto startTime = chrono::steady_clock::now();
 	while (!m_stopSignal)
 	{
@@ -305,20 +325,21 @@ void *HardwareManager::WriterThread()
 		}
 
 		// Sync all the cache's before we read.
-		SetSyncOffset( (unsigned long)nextData - (unsigned long)m_ddrBaseOff );
+		SetSyncOffset((unsigned long)nextData - (unsigned long)m_ddrBaseOff);
 		SyncForCPU();
 
-		outputFile.write(nextData, streamsize(BUFFER_BYTESIZE));
-		m_bytesWritten += BUFFER_BYTESIZE;
-		
+		outputFile.write(nextData, streamsize(blockSize));
+		m_bytesWritten += blockSize;
+
 		auto currTime = chrono::steady_clock::now();
 
 		chrono::duration<double> elapsed = currTime - startTime;
 
-		unsigned long bytesDiff = (m_bytesWritten - lastBytesWritten)/1e6;
+		unsigned long bytesDiff = (m_bytesWritten - lastBytesWritten) / 1e6;
 
-		if((bytesDiff) >= 100) {
-			//cerr << "Writer thread average speed: " << ((double)bytesDiff)/(elapsed.count()) << " MB per second." << endl;
+		if ((bytesDiff) >= 100)
+		{
+			cout << "Writer thread average speed: " << ((double)bytesDiff) / (elapsed.count()) << " MB per second." << endl;
 			lastBytesWritten = m_bytesWritten;
 			startTime = chrono::steady_clock::now();
 		}
@@ -1003,44 +1024,54 @@ bool HardwareManager::EnableAXI_Interrupts()
  * These are helper functions for the UDMABUF management
  * They are used in the writer for ensuring cache is synchronized.
  */
-void HardwareManager::SetSyncOffset(unsigned long offset){
+void HardwareManager::SetSyncOffset(unsigned long offset)
+{
 	static int fd = 0;
 	static char attr[1024];
-	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_offset",O_WRONLY)) != -1){
-		sprintf(attr,"%lu",offset);
-		write(fd,attr,strlen(attr));
+	if ((fd = open("/sys/class/udmabuf/udmabuf0/sync_offset", O_WRONLY)) != -1)
+	{
+		sprintf(attr, "%lu", offset);
+		write(fd, attr, strlen(attr));
 		close(fd);
 	}
 }
 
-void HardwareManager::SetSyncSize(unsigned int size){
+void HardwareManager::SetSyncSize(unsigned int size)
+{
 	static int fd = 0;
 	static char attr[1024];
-	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_size",O_WRONLY)) != -1){
-		sprintf(attr,"%u",size);
-		write(fd,attr,strlen(attr));
+	if ((fd = open("/sys/class/udmabuf/udmabuf0/sync_size", O_WRONLY)) != -1)
+	{
+		sprintf(attr, "%u", size);
+		write(fd, attr, strlen(attr));
 		close(fd);
 	}
 }
 
-void HardwareManager::SetSyncDir(){
+void HardwareManager::SetSyncDir()
+{
 	static int fd = 0;
 	static char attr[1024];
-	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_direction",O_WRONLY)) != -1){
-		sprintf(attr,"%d",2);
-		write(fd,attr,strlen(attr));
+	if ((fd = open("/sys/class/udmabuf/udmabuf0/sync_direction", O_WRONLY)) != -1)
+	{
+		sprintf(attr, "%d", 2);
+		write(fd, attr, strlen(attr));
 		close(fd);
 	}
 }
 
-bool HardwareManager::SyncForCPU(){
+bool HardwareManager::SyncForCPU()
+{
 	static int fd = 0;
 	string one = "1";
-	if((fd = open("/sys/class/udmabuf/udmabuf0/sync_for_cpu",O_WRONLY)) != -1){
-		write(fd,one.c_str(),one.length());
+	if ((fd = open("/sys/class/udmabuf/udmabuf0/sync_for_cpu", O_WRONLY)) != -1)
+	{
+		write(fd, one.c_str(), one.length());
 		close(fd);
 		return true;
-	} else {
+	}
+	else
+	{
 		return false;
 	}
 }

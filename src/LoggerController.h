@@ -9,6 +9,7 @@
 
 #include "HardwareManager.h"
 #include "MQTTController.h"
+#include "HTTPClient.h"
 #include <string>
 #include <fstream>
 
@@ -30,9 +31,12 @@ public:
 
     bool Update(double elapsed);
 
+    bool GetErrorState() { return m_hwMgr.GetErrorState(); }
+
 private:
     MQTTController m_mqttCtlr;
     HardwareManager m_hwMgr;
+    HTTPClient m_httpClient;
     ofstream m_agcLogFile;
     string m_nodeName;
     string m_ifFilename;
