@@ -126,6 +126,13 @@ int main(int argc, char **argv)
 				break;
 			}
 
+			cout.flush();
+			cerr.flush();
+
+			if(logger.GetErrorState()){
+				break;
+			}
+
 			logger.Update(elapsed.count());
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
