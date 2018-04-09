@@ -20,7 +20,7 @@ public:
                       string config_filename, unsigned long numUpdateBytes, unsigned long numPreBytes,
                       unsigned long numPostBytes, unsigned long uploadRefactorySec,
                       string http_host, int http_port,
-                      string mqtt_host, int mqtt_port );
+                      string mqtt_host, int mqtt_port, bool counterOn );
     ~LoggerController();
 
     int MQTT_Callback( void * context, char *topicName, int topicLen, MQTTClient_message *message );

@@ -21,7 +21,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 								   unsigned long numPostBytes,
 								   unsigned long uploadRefactorySec,
 								   string http_host, int http_port,
-								   string mqtt_host, int mqtt_port) : m_hwMgr(ifFilename, config_filename)
+								   string mqtt_host, int mqtt_port, bool counterOn) : m_hwMgr(ifFilename, config_filename, counterOn)
 {
 	m_nodeName = nodeName;
 	m_ifFilename = ifFilename;
