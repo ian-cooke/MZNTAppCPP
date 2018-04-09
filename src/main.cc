@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <chrono>
+#include <thread>
 #include "LoggerController.h"
 
 using namespace std;
@@ -105,35 +106,41 @@ int main(int argc, char **argv)
  	
 	LoggerController logger(node_name, if_file,agc_file, config_file, update_byte_size, 
 							num_pre_bytes,num_post_bytes, upload_refactory,
-							http_host, http_port, mqtt_host, mqtt_port );
+							http_host, http_port, mqtt_host, mqtt_port, counter );
 
-	if (!logger.Start())
-	{
-		cout << "Error starting." << endl;
-		return -1;
-	}
-
-	// Main loop.
-	auto startTime = chrono::steady_clock::now();
-	while(1){
-		auto currTime = chrono::steady_clock::now();
-		chrono::duration<double> elapsed = currTime - startTime;
-
-		if(elapsed.count() > runtime){
-			cout << "Stopping. " << elapsed.count() << " sec elapsed." << endl;
-			break;
+	try {
+		if (!logger.Start())
+		{
+			cerr << "Error starting." << endl;
+			return -1;
 		}
 
-		logger.Update(elapsed.count());
+		// Main loop.
+		auto startTime = chrono::steady_clock::now();
+		while(1){
+			auto currTime = chrono::steady_clock::now();
+			chrono::duration<double> elapsed = currTime - startTime;
+
+			if(elapsed.count() > runtime){
+				cout << "Stopping. " << elapsed.count() << " sec elapsed." << endl;
+				break;
+			}
+
+			logger.Update(elapsed.count());
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+
+		if (!logger.Stop())
+		{
+			cerr << "Error stopping." << endl;
+			return -1;
+		}
+	}
+	catch (std::exception& e) {
+		cerr<<"Exception caught." << endl;
 	}
 
-	if (!logger.Stop())
-	{
-		cout << "Error stopping." << endl;
-		return -1;
-	}
-
-	cout << "Goodbye." << endl;
+	cout << "Goodbye." << endl << std::flush;
 
 	return 0;
 }
