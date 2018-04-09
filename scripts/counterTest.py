@@ -1,5 +1,8 @@
 import struct
 import sys
+from tqdm import tqdm
+from tqdm import trange
+import os
 
 if __name__ == '__main__':
     filename = sys.argv[1]
@@ -9,6 +12,9 @@ if __name__ == '__main__':
             printSetting = 1
 
     print("Opening: "+filename)
+    fileSize = os.path.getsize(filename)
+    print(" File size: " + str(fileSize) )
+    numErrors = 0
 
     with open(filename,"rb") as binFile:
         firstIter = 1
@@ -31,9 +37,14 @@ if __name__ == '__main__':
                         print("Error at: "+ str(index))
                         print("Last: "+str(lastData))
                         print("Curr: "+str(data))
+                        numErrors = numErrors + 1
 
             else:
                 print("First number: " + str(data))
                 firstIter = 0
+
+
             lastData = data
             index += 1
+            
+    print("Num errors: " + str(numErrors))
