@@ -8,13 +8,15 @@
 #include "LoggerController.h"
 #include "../MZNT_http/http-client.h"
 #include "system_defines.h"
+#include "HardwareManager.h"
 
 #include <iostream>
 #include <string>
+#include <chrono>
 
 using namespace std;
 
-LoggerController::LoggerController(string nodeName, string ifFilename, string config_filename,
+LoggerController::LoggerController(string nodeName, string ifFilename, string agcFilename, string config_filename,
 								   unsigned long numUploadBytes, unsigned long numPreBytes,
 								   unsigned long numPostBytes,
 								   unsigned long uploadRefactorySec,
@@ -23,6 +25,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string co
 {
 	m_nodeName = nodeName;
 	m_ifFilename = ifFilename;
+	m_agcFilename = agcFilename;
 
 	m_mqtt_port = mqtt_port;
 	m_http_port = mqtt_port;
@@ -43,7 +46,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string co
 
 LoggerController::~LoggerController()
 {
-	curl_destroy();
+	http_client_destroy();
 }
 
 //-----------------------------------------------------------------------
@@ -76,16 +79,23 @@ bool LoggerController::Start()
 
 	string info_msg = m_nodeName + "-ONLINE";
 
-	if (!m_mqttCtlr.Publish("info", info_msg.c_str(), 2))
+
+	// Tell the leader we are online.
+	if (!m_mqttCtlr.Publish("leader", info_msg.c_str(), 2))
 	{
 		cerr << "Failed to publish message." << endl;
 	}
 
 	// Initialize HTTP upload.
-	if (curl_init("gnssfast.colorado.edu", 1337) < 0)
+	if (http_client_init("gnssfast.colorado.edu", 1337) < 0)
 	{
 		cerr << "Failed to initialize curl." << endl;
 	}
+
+	// Open AGC log file and overwrite what is there.
+	// Each update we make to AGC log file will open/close the file.
+	m_agcLogFile.open(m_agcFilename.c_str(), ios::out | ios::binary );
+	m_agcLogFile.close();
 
 	if (!m_hwMgr.Start())
 	{
@@ -114,12 +124,36 @@ bool LoggerController::Stop()
 
 //-----------------------------------------------------------------------
 // Update
-// Requires: ma is a function with type MQTTClient_messageArrived
+// Requires: Performs regular updates of logger controller.
+//
 // Modifies:
 // returns: True on success
 //-----------------------------------------------------------------------
-bool LoggerController::Update()
+bool LoggerController::Update(double elapsed)
 {
+	// Check time.
+	static double lastTime = 0.0;
+
+	if((elapsed-lastTime) >= 0.5) {
+		lastTime = elapsed;
+
+		AGCLogData data[4];
+		m_agcLogFile.open(m_agcFilename.c_str(), ios::out | ios::binary  | ios::app );	
+		if(!m_agcLogFile.is_open()){
+			cerr << "Failed to open AGC logfile." << endl;
+			return false;
+		}
+		m_hwMgr.GetAGCData( data );
+		m_agcLogFile.write(reinterpret_cast<const char*>(data), streamsize(sizeof(AGCLogData)*4));
+		m_agcLogFile.close();
+		//cout << "Updated AGC logfile."<<endl;
+
+		// Publish.
+		string topic = m_nodeName + "-agc";
+		m_mqttCtlr.Publish(topic, "keepalive",0);
+	}
+
+
 	return true;
 }
 

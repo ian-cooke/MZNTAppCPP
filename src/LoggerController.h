@@ -10,12 +10,13 @@
 #include "HardwareManager.h"
 #include "MQTTController.h"
 #include <string>
+#include <fstream>
 
 using namespace std;
 
 class LoggerController : public MQTTMsgHandler {
 public:
-    LoggerController( string nodeName, string ifFilename, 
+    LoggerController( string nodeName, string ifFilename, string agcFilename,
                       string config_filename, unsigned long numUpdateBytes, unsigned long numPreBytes,
                       unsigned long numPostBytes, unsigned long uploadRefactorySec,
                       string http_host, int http_port,
@@ -27,18 +28,21 @@ public:
     bool Start();
     bool Stop();
 
-    bool Update();
+    bool Update(double elapsed);
 
 private:
     MQTTController m_mqttCtlr;
     HardwareManager m_hwMgr;
+    ofstream m_agcLogFile;
     string m_nodeName;
     string m_ifFilename;
+    string m_agcFilename;
     string m_http_host;
     string m_mqtt_host;
     int m_http_port;
     int m_mqtt_port;
     bool m_uploading;
+    int m_agcRate;
     unsigned long m_numEvents;
     unsigned long m_numUpdates;
     unsigned long m_numPreBytes;

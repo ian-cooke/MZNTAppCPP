@@ -8,6 +8,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <string.h>
+#include <chrono>
 #include "LoggerController.h"
 
 using namespace std;
@@ -102,7 +103,7 @@ int main(int argc, char **argv)
 	cout << "Event (pre) data size: " << (num_pre_bytes/1000000) << " mb" << endl;
 	//cout << "Event (post) data size: " << 
  	
-	LoggerController logger(node_name, if_file, config_file, update_byte_size, 
+	LoggerController logger(node_name, if_file,agc_file, config_file, update_byte_size, 
 							num_pre_bytes,num_post_bytes, upload_refactory,
 							http_host, http_port, mqtt_host, mqtt_port );
 
@@ -112,7 +113,19 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	sleep(runtime);	
+	// Main loop.
+	auto startTime = chrono::steady_clock::now();
+	while(1){
+		auto currTime = chrono::steady_clock::now();
+		chrono::duration<double> elapsed = currTime - startTime;
+
+		if(elapsed.count() > runtime){
+			cout << "Stopping. " << elapsed.count() << " sec elapsed." << endl;
+			break;
+		}
+
+		logger.Update(elapsed.count());
+	}
 
 	if (!logger.Stop())
 	{

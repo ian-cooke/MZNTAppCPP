@@ -30,7 +30,7 @@ using namespace std;
 HardwareManager::HardwareManager(string if_outFilename, string conf_filename) : m_dataQueue(300)
 {
 	// Initialize all member variables to default values.
-	m_counterOn = false;
+	m_counterOn = true;
 	m_resamplingOn = true;
 	m_resampThreshold = 0x04000000;
 	m_initialized = false;
@@ -45,6 +45,7 @@ HardwareManager::HardwareManager(string if_outFilename, string conf_filename) : 
 	m_cdmaBase = m_cdmaBaseOff = NULL;
 	m_intrBase = m_intrBaseOff = NULL;
 	m_paddr_dmaTarget = 0;
+	m_spiWrite = m_spiRead = m_spiBase = NULL;
 
 	m_bytesWritten = 0;
 
@@ -80,6 +81,32 @@ HardwareManager::~HardwareManager()
 			cerr << "Failed to release mmap to DDR" << endl;
 		}
 	}
+
+	if (m_spiBase)
+	{
+		cout << "Releasing SPI base" << endl;
+		if (munmap((void *)m_spiBase, MAP_SIZE) == -1)
+		{
+			cerr << "Failed to release mmap to SPI base" << endl;
+		}
+	}
+
+	if (m_spiRead)
+	{
+		cout << "Releasing SPI base" << endl;
+		if (munmap((void *)m_spiRead, MAP_SIZE) == -1)
+		{
+			cerr << "Failed to release mmap to SPI base" << endl;
+		}
+	}
+	if (m_spiWrite)
+	{
+		cout << "Releasing SPI write" << endl;
+		if (munmap((void *)m_spiWrite, MAP_SIZE) == -1)
+		{
+			cerr << "Failed to release mmap to SPI write" << endl;
+		}
+	}
 }
 
 //--------------------------------------------------------------------------------------------------------------
@@ -108,12 +135,14 @@ void *HardwareManager::HWThread()
 			//cout << "waiting for interrupt." << endl;
 			regValue = *(volatile unsigned long *)((char *)m_intrBaseOff + AXIINTC_ISR_OFFSET);
 			usleep(10);
-			if(m_stopSignal) {
+			if (m_stopSignal)
+			{
 				break;
 			}
 		} while (!(regValue & BUFINT01_ISR_MASK));
 
-		if(m_stopSignal) {
+		if (m_stopSignal)
+		{
 			break;
 		}
 
@@ -186,7 +215,7 @@ void *HardwareManager::HWThread()
 		*(volatile unsigned long *)((char *)m_cdmaBaseOff + XAXICDMA_SRCADDR_OFFSET) = BRAM_BASE_ADDRESS + bufferNum * BUFFER_BYTESIZE;
 
 		// Set the destination address. This is based on the physical address provided by the dmaTarget.
-		queuePos = (unsigned long)m_paddr_dmaTarget + queueIndex * (unsigned long)BUFFER_BYTESIZE;
+		queuePos = m_paddr_dmaTarget + queueIndex * (unsigned long)BUFFER_BYTESIZE;
 		*(volatile unsigned long *)((char *)m_cdmaBaseOff + XAXICDMA_DSTADDR_OFFSET) = queuePos; //if_data;
 
 		// Write number of bytes to transfer (this initiates the DMA)
@@ -197,7 +226,6 @@ void *HardwareManager::HWThread()
 		{
 			regValue = *(volatile unsigned long *)((char *)m_cdmaBaseOff + XAXICDMA_SR_OFFSET);
 		} while (!(regValue & XAXICDMA_SR_IDLE_MASK));
-
 
 		/*** Print DMA transfer status ***/
 		if ((regValue & XAXICDMA_XR_IRQ_IOC_MASK))
@@ -219,7 +247,7 @@ void *HardwareManager::HWThread()
 		m_dataQueue.push(((char *)m_ddrBaseOff + queueIndex * BUFFER_BYTESIZE));
 
 		// Inc queue index
-		queueIndex = (queueIndex + 1) % DDR_Q_SIZE;
+		queueIndex = (queueIndex + 1) % (DDR_Q_SIZE-2);
 
 		loopCnt++;
 	}
@@ -265,7 +293,7 @@ void *HardwareManager::WriterThread()
 			break;
 		}
 
-		outputFile.write(nextData, BUFFER_BYTESIZE);
+		outputFile.write(nextData, streamsize(BUFFER_BYTESIZE));
 		m_bytesWritten += BUFFER_BYTESIZE;
 	}
 
@@ -278,10 +306,87 @@ void *HardwareManager::WriterThread()
 }
 
 //--------------------------------------------------------------------------------------------------------------
-// parse_conf
-// requires conf_filename is a valid string path to config file
+// GetAGCData
+// requires: dataArray is an array of 4 AGCLogData ready to be filled
+// actions: Reads AGC data into dataArray
+// Modifies: dataArray
+// returns: true on success, false otherwise.
+//
+//-------------------------------------------------------------------------------------------------------------
+bool HardwareManager::GetAGCData(AGCLogData dataArray[4])
+{
+	if (!m_initialized)
+	{
+		return false;
+	}
+
+	// This buffer holds our SPI register values
+	volatile uint32_t inputBuffer[49] __attribute__((aligned(64)));
+
+	int channel = 0;
+	for (channel = 0; channel < 4; channel++)
+	{
+		// Wait for not busy
+		// This writes to register 5 of the NT1065 over spi via FPGA
+		// The Bits of reg are as follows:
+		/*0 - temp meas sys execute
+			 * 1 - temp meas mode 0 - single 1 -continuous
+			 * 2-3 unused
+			 *  4-5 channel to be monitored
+			 *  6-7 unused
+			 */
+		*(m_spiWrite + 5) = ((channel << 4) | (0x0 << 1) | (0x1 << 0)) | (0x05 << 8);
+
+		while (*m_spiBase & 0x00000008)
+		{
+			// Busy wait.
+		}
+
+		// Give write instruction instruction
+		*m_spiBase = 0x00000002;
+		usleep(10);
+		*m_spiBase = 0x00000000;
+
+		// Wait for not busy
+		while (*m_spiBase & 0x00000008)
+		{
+			/// Busy wait.
+		}
+
+		// Give read instruction
+		*m_spiBase = 0x00000004;
+		usleep(10);
+		*m_spiBase = 0x00000000;
+
+		// Wait for not busy
+		while (*m_spiBase & 0x00000008)
+		{
+			/// Busy wait.
+		}
+
+		// Read in the values.
+		for (int iter = 0; iter < 11; iter++)
+		{
+			inputBuffer[iter] = 0x000000FF & *(m_spiRead + iter);
+		}
+
+		// Add the values to the data.
+		dataArray[channel].ms_truncated = GetBytesWritten();
+		dataArray[channel].status = inputBuffer[5];
+		dataArray[channel].upperT = inputBuffer[7];
+		dataArray[channel].lowerT = inputBuffer[8];
+		dataArray[channel].rfAGC = inputBuffer[9];
+		dataArray[channel].ifAGC = inputBuffer[10] & 0x1F;
+	}
+
+	return true;
+}
+
+//--------------------------------------------------------------------------------------------------------------
+// InitializeHardware
+// requires: Class initialized.
 // actions: Initializes the NT and 1065
-// Modifies: SpiWrBuffer
+// Modifies:
 // returns: true on success, false otherwise.
 //
 //-------------------------------------------------------------------------------------------------------------
@@ -324,6 +429,24 @@ bool HardwareManager::InitializeHardware()
 		*(unsigned long *)((char *)m_cdmaBaseOff + XAXICDMA_CR_OFFSET) = regValue;
 	}
 
+	// MMAP the SPI Peripherals
+	m_spiWrite = mmapDDR(MAP_SIZE, XPAR_NT1065_SPI_WR_SPI_MEM_CTRL_S_AXI_BASEADDR, NULL);
+	if (m_spiWrite == NULL)
+	{
+		return false;
+	}
+
+	m_spiBase = mmapDDR(MAP_SIZE, XPAR_NT1065_SPI_NT1065_SPI_DRIVER_V1_0_0_BASEADDR, NULL);
+	if (m_spiBase == NULL)
+	{
+		return false;
+	}
+
+	m_spiRead = mmapDDR(MAP_SIZE, XPAR_NT1065_SPI_RD_SPI_MEM_CTRL_S_AXI_BASEADDR, NULL);
+	if (m_spiRead == NULL)
+	{
+		return false;
+	}
 	// MMAP the DDR
 	// Memory map the DDR to the allocated kernel module
 	// WRITER and gen thread share this address, so w e can't move this initialization to the gen thread?
@@ -333,7 +456,7 @@ bool HardwareManager::InitializeHardware()
 		return false;
 	}
 
-	cout << "Physical Address target: " << hex<< (unsigned long)m_paddr_dmaTarget << endl;
+	cout << "Physical Address target: " << hex << (unsigned long)m_paddr_dmaTarget << endl;
 
 	// This turns on interrupts from the FPGA
 	if (!EnableAXI_Interrupts())
@@ -379,7 +502,7 @@ bool HardwareManager::Stop()
 		m_dataQueue.pop_front();
 	}
 
-	cout << "Waiting for HW thread." <<endl;
+	cout << "Waiting for HW thread." << endl;
 
 	pthread_join(m_hwThread, NULL);
 
@@ -683,7 +806,7 @@ bool HardwareManager::ConfigureFPGASettings()
 	if (m_counterOn == true)
 	{
 		printf("Setting counter to ON.\n");
-		if (m_resamplingOn == false)
+		if (m_resamplingOn == true)
 		{
 			*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000002; // Turn on counter mode w/o resampling 0b10
 		}
