@@ -47,12 +47,15 @@ private:
     int m_mqtt_port;
     bool m_uploading;
     int m_agcRate;
+    int m_agcThreshold;
+    double m_agcUpdateRate;
     unsigned long m_numEvents;
     unsigned long m_numUpdates;
     unsigned long m_numPreBytes;
     unsigned long m_numUpdateBytes;
     unsigned long m_numPostBytes;
     unsigned long m_uploadRefactory;
+    unsigned long m_bytesWrittenAGC;
 };
 
 #endif

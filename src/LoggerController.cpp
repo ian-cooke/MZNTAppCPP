@@ -13,6 +13,7 @@
 #include <iostream>
 #include <string>
 #include <chrono>
+#include <stdlib.h> // for abs
 
 using namespace std;
 
@@ -42,11 +43,13 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 
 	m_numEvents = 0;
 	m_numUpdates = 0;
+	m_bytesWrittenAGC = 0;
+	m_agcUpdateRate = 0.5;
+	m_agcThreshold = 5;
 }
 
 LoggerController::~LoggerController()
 {
-	//http_client_destroy();
 }
 
 //-----------------------------------------------------------------------
@@ -133,8 +136,26 @@ bool LoggerController::Update(double elapsed)
 {
 	// Check time.
 	static double lastTime = 0.0;
+	int agcLast[4];
+	static int numLastErrors = 0;
 
-	if((elapsed-lastTime) >= 0.5) {
+	// Check for errors.
+	if(m_hwMgr.GetNumErrors() > numLastErrors) {
+		// Publish the error.
+		m_mqttCtlr.Publish( "errors", m_nodeName + " had a HW error.", 0);
+		// Reset errors.
+		//m_hwMgr.ResetNumErrors();
+		numLastErrors = m_hwMgr.GetNumErrors();
+	}
+	
+	// Initialize the agc data.
+	AGCLogData initialData[4];
+	m_hwMgr.GetAGCData( initialData );
+	for(int i=0; i < 4; i++){
+		agcLast[i] = initialData[i].ifAGC;
+	}
+
+	if((elapsed-lastTime) >= m_agcUpdateRate) {
 		lastTime = elapsed;
 
 		AGCLogData data[4];
@@ -143,16 +164,34 @@ bool LoggerController::Update(double elapsed)
 			cerr << "Failed to open AGC logfile." << endl;
 			return false;
 		}
+
 		m_hwMgr.GetAGCData( data );
 		m_agcLogFile.write(reinterpret_cast<const char*>(data), streamsize(sizeof(AGCLogData)*4));
 		m_agcLogFile.close();
+
+		// Update the agc data and send MQTT if necessary
+		for( int i = 0; i < 4; i++ ) {
+			if( abs(agcLast[i] - data[i].ifAGC) > m_agcThreshold ) {
+				cout << "AGC change event!" << endl;
+				if(agcLast[i] < data[i].ifAGC) {
+					cout << "AGC on channel " << i << " went HIGH" << endl;
+					m_mqttCtlr.Publish( "leader" , "HIGH-" + std::to_string(i),0);
+				} else {
+					cout << "AGC on channel " << i << " went LOW" << endl;
+					m_mqttCtlr.Publish( "leader" , "LOW-" + std::to_string(i),0);
+				}
+			}
+
+			agcLast[i] = data[i].ifAGC;
+ 		}
+
 		//cout << "Updated AGC logfile."<<endl;
+		m_bytesWrittenAGC += sizeof(AGCLogData)*4;
 
 		// Publish.
 		string topic = m_nodeName + "-agc";
 		m_mqttCtlr.Publish(topic, "keepalive",0);
 	}
-
 
 	return true;
 }
@@ -213,21 +252,37 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 
 		// Upload Pre + Post chunk.
 		string remoteLocation = m_http_host + "/" + m_nodeName;
+		string remoteLocationAGC = m_http_host+"/" + m_nodeName;
 		if (msgPayload == "start")
 		{
-			remoteLocation += ("/event" + to_string(m_numEvents) + ".bin");
+			remoteLocation += ("/event" + to_string(m_numEvents) + ".IF.bin");
+			remoteLocationAGC += ("/event" + to_string(m_numEvents) + ".AGC.bin");
 			m_numEvents++;
 		}
 		else
 		{
-			remoteLocation += ("/update" + to_string(m_numUpdates) + ".bin");
+			remoteLocation += ("/update" + to_string(m_numUpdates) + ".IF.bin");
+			remoteLocationAGC += ("/update" + to_string(m_numUpdates) + ".AGC.bin");
 			m_numUpdates++;
 		}
 
 		if(!m_httpClient.upload(remoteLocation,m_ifFilename, m_http_port, offset, totalSize, true))
 		{
-			cerr << "Error uploading!" << endl;
+			cerr << "Error uploading IF data!" << endl;
 		}
+
+		if(!m_httpClient.upload(remoteLocationAGC, m_agcFilename, m_http_port, 0, m_bytesWrittenAGC,true)) {
+			cerr << "Error uploading AGC." << endl;
+		}
+	}
+
+	if( msgPayload == "halt") {
+		m_hwMgr.SetWrite(false);
+		m_hwMgr.RequestIFWriteBreak();
+	}
+	
+	if(msgPayload == "resume") {
+		m_hwMgr.SetWrite(true);
 	}
 
 	return 0;

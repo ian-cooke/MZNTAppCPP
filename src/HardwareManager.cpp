@@ -50,6 +50,7 @@ HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bo
 
 	m_bytesWritten = 0;
 	m_numErrors = 0;
+	m_writeOn = true;
 
 	m_conf_filename = conf_filename;
 }
@@ -179,8 +180,8 @@ void *HardwareManager::HWThread()
 			{
 				cerr << "ERROR: HW INTR MISSED." << endl;
 				m_numErrors++;
-				//continue;
-				break;
+				continue;
+				//break;
 			}
 		}
 
@@ -210,6 +211,7 @@ void *HardwareManager::HWThread()
 		while (m_dataQueue.size() == DDR_Q_SIZE-2)
 		{
 			cerr << "Queue full, wait for transfer." << endl;
+			//m_numErrors++;
 		}
 
 		// Set the source address - this is one of two buffers (hence the bufferNum*BUFFER_BYTESIZE)
@@ -236,12 +238,16 @@ void *HardwareManager::HWThread()
 		else if ((regValue & XAXICDMA_XR_IRQ_DELAY_MASK))
 		{
 			cerr << "GT: IRQ Delay Interrupt" << endl;
-			break;
+			m_numErrors++;
+			continue;
+			//break;
 		}
 		else if ((regValue & XAXICDMA_XR_IRQ_ERROR_MASK))
 		{
 			cerr << "GT: Transfer Error Interrupt" << endl;
-			break;
+			m_numErrors++;
+			continue;
+			//break;
 		}
 
 		// Add the pointer to the queue.
@@ -302,9 +308,13 @@ void *HardwareManager::WriterThread()
 	}*/
 
 	ofstream outputFile;
+
+	// The first open will overwrite any file with this name.
 	outputFile.open(m_IF_baseName.c_str(), ios::out | ios::binary);
 	static unsigned long lastBytesWritten = 0;
+	static unsigned int fileNo = 1;
 	unsigned int blockSize = 1 * BUFFER_BYTESIZE;
+	static string lastFilename = m_IF_baseName;
 
 	// Set the contiguous buffer we have in RAM to be a DMA target buffer
 	// The underlying UDMABUF driver will keep this portion of ram syncd with the cache
@@ -314,6 +324,24 @@ void *HardwareManager::WriterThread()
 	auto startTime = chrono::steady_clock::now();
 	while (!m_stopSignal)
 	{
+		if(m_breakFileSignal) {
+			// Close the file.
+			outputFile.close();
+			string newName = m_IF_baseName + "." + to_string(fileNo);
+			cout << "Opening new file: " + newName << endl;
+			outputFile.open(newName.c_str(), ios::out | ios::binary );
+			fileNo++;
+			m_breakFileSignal = false;
+
+			// Push the last filename and update.
+			// push here
+			lastFilename = newName;
+
+			// reset bytes written.
+			m_bytesWritten = 0;
+			lastBytesWritten = 0;
+		}
+
 		// Get the first data.
 		char *nextData = m_dataQueue.pop_front();
 
@@ -327,9 +355,10 @@ void *HardwareManager::WriterThread()
 		// Sync all the cache's before we read.
 		SetSyncOffset((unsigned long)nextData - (unsigned long)m_ddrBaseOff);
 		SyncForCPU();
-
-		outputFile.write(nextData, streamsize(blockSize));
-		m_bytesWritten += blockSize;
+		if(m_writeOn){
+			outputFile.write(nextData, streamsize(blockSize));
+			m_bytesWritten += blockSize;
+		}
 
 		auto currTime = chrono::steady_clock::now();
 

@@ -69,6 +69,13 @@ class HardwareManager
 
 	bool GetErrorState() { return (m_numErrors > 0); }
 
+	int GetNumErrors() { return m_numErrors; }
+	void ResetNumErrors() { m_numErrors = 0; }
+
+	void RequestIFWriteBreak() {m_breakFileSignal = true;};
+
+	bool SetWrite(bool value) { m_writeOn = value; return true;}
+
   private:
 	bool ConfigureNT1065(bool verbose);
 
@@ -95,6 +102,7 @@ class HardwareManager
 	uint32_t m_resampThreshold;
 	bool m_initialized;
 	int m_numErrors;
+	bool m_writeOn;
 
 	pthread_t m_hwThread;
 	pthread_t m_writerThread;
@@ -102,6 +110,7 @@ class HardwareManager
 	bool m_breakFileSignal;
 
 	unsigned long m_bytesWritten;
+	
 
 	string m_conf_filename;
 
