@@ -12,6 +12,7 @@
 #include "HTTPClient.h"
 #include <string>
 #include <fstream>
+#include <chrono>
 
 using namespace std;
 
@@ -21,7 +22,7 @@ public:
                       string config_filename, unsigned long numUpdateBytes, unsigned long numPreBytes,
                       unsigned long numPostBytes, unsigned long uploadRefactorySec,
                       string http_host, int http_port,
-                      string mqtt_host, int mqtt_port, bool counterOn );
+                      string mqtt_host, int mqtt_port, bool counterOn, bool resampling );
     ~LoggerController();
 
     int MQTT_Callback( void * context, char *topicName, int topicLen, MQTTClient_message *message );
@@ -30,6 +31,8 @@ public:
     bool Stop();
 
     bool Update(double elapsed);
+
+    bool GetStopCond() {return m_stopCond;}
 
     bool GetErrorState() { return m_hwMgr.GetErrorState(); }
 
@@ -46,8 +49,12 @@ private:
     int m_http_port;
     int m_mqtt_port;
     bool m_uploading;
+    bool m_stopCond;
     int m_agcRate;
     int m_agcThreshold;
+    AGCLogData m_agcLast[4];
+    chrono::time_point<chrono::steady_clock> m_profilePoint;
+    chrono::time_point<chrono::system_clock> m_eventTimes[4];
     double m_agcUpdateRate;
     unsigned long m_numEvents;
     unsigned long m_numUpdates;

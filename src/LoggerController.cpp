@@ -14,6 +14,7 @@
 #include <string>
 #include <chrono>
 #include <stdlib.h> // for abs
+#include <ctime>
 
 using namespace std;
 
@@ -22,7 +23,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 								   unsigned long numPostBytes,
 								   unsigned long uploadRefactorySec,
 								   string http_host, int http_port,
-								   string mqtt_host, int mqtt_port, bool counterOn) : m_hwMgr(ifFilename, config_filename, counterOn)
+								   string mqtt_host, int mqtt_port, bool counterOn, bool resampling) : m_hwMgr(ifFilename, config_filename, counterOn, resampling)
 {
 	m_nodeName = nodeName;
 	m_ifFilename = ifFilename;
@@ -37,6 +38,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 	m_numPreBytes = (numPreBytes / BUFFER_BYTESIZE) * BUFFER_BYTESIZE;
 	m_numPostBytes = (numPostBytes / BUFFER_BYTESIZE) * BUFFER_BYTESIZE;
 	m_uploading = false;
+	m_stopCond = false;
 
 	m_uploadRefactory = uploadRefactorySec;
 	m_numUpdateBytes = (numUploadBytes / BUFFER_BYTESIZE) * BUFFER_BYTESIZE;
@@ -46,6 +48,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 	m_bytesWrittenAGC = 0;
 	m_agcUpdateRate = 0.5;
 	m_agcThreshold = 5;
+	m_profilePoint = chrono::steady_clock::now();
 }
 
 LoggerController::~LoggerController()
@@ -95,6 +98,12 @@ bool LoggerController::Start()
 		cerr << "Failed to initialize curl." << endl;
 	}
 
+	// Get the current time and sync time.
+	auto currentTime = chrono::system_clock::now();
+	std::time_t currTT = chrono::system_clock::to_time_t(currentTime);
+	// Display the current time.
+	cout << "Current time: " << ctime(&currTT) << endl;
+
 	// Open AGC log file and overwrite what is there.
 	// Each update we make to AGC log file will open/close the file.
 	m_agcLogFile.open(m_agcFilename.c_str(), ios::out | ios::binary );
@@ -103,6 +112,13 @@ bool LoggerController::Start()
 	if (!m_hwMgr.Start())
 	{
 		cerr << "HW init failed." << endl;
+	}
+
+	// Initialize the agc data.
+	AGCLogData initialData[4];
+	m_hwMgr.GetAGCData( initialData );
+	for(int i=0; i < 4; i++){
+		m_agcLast[i] = initialData[i];
 	}
 
 	return true;
@@ -136,7 +152,6 @@ bool LoggerController::Update(double elapsed)
 {
 	// Check time.
 	static double lastTime = 0.0;
-	int agcLast[4];
 	static int numLastErrors = 0;
 
 	// Check for errors.
@@ -146,13 +161,6 @@ bool LoggerController::Update(double elapsed)
 		// Reset errors.
 		//m_hwMgr.ResetNumErrors();
 		numLastErrors = m_hwMgr.GetNumErrors();
-	}
-	
-	// Initialize the agc data.
-	AGCLogData initialData[4];
-	m_hwMgr.GetAGCData( initialData );
-	for(int i=0; i < 4; i++){
-		agcLast[i] = initialData[i].ifAGC;
 	}
 
 	if((elapsed-lastTime) >= m_agcUpdateRate) {
@@ -171,18 +179,20 @@ bool LoggerController::Update(double elapsed)
 
 		// Update the agc data and send MQTT if necessary
 		for( int i = 0; i < 4; i++ ) {
-			if( abs(agcLast[i] - data[i].ifAGC) > m_agcThreshold ) {
-				cout << "AGC change event!" << endl;
-				if(agcLast[i] < data[i].ifAGC) {
-					cout << "AGC on channel " << i << " went HIGH" << endl;
+			if( abs(m_agcLast[i].ifAGC - data[i].ifAGC) > m_agcThreshold ) {
+				auto eventTime = chrono::system_clock::now();
+				time_t eventTT = chrono::system_clock::to_time_t(eventTime);
+				cout << "Time: " << std::ctime(&eventTT) << endl;
+				if(m_agcLast[i].ifAGC < data[i].ifAGC) {
+					cout << "AGC on channel " << i << " went HIGH at "  << endl;
 					m_mqttCtlr.Publish( "leader" , "HIGH-" + std::to_string(i),0);
 				} else {
-					cout << "AGC on channel " << i << " went LOW" << endl;
+					cout << "AGC on channel " << i << " went LOW at" << endl;
 					m_mqttCtlr.Publish( "leader" , "LOW-" + std::to_string(i),0);
 				}
 			}
 
-			agcLast[i] = data[i].ifAGC;
+			m_agcLast[i] = data[i];
  		}
 
 		//cout << "Updated AGC logfile."<<endl;
@@ -266,23 +276,39 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 			m_numUpdates++;
 		}
 
-		if(!m_httpClient.upload(remoteLocation,m_ifFilename, m_http_port, offset, totalSize, true))
+		if(!m_httpClient.upload(remoteLocation,m_hwMgr.GetIFFilename().c_str(), m_http_port, offset, totalSize, true, true))
 		{
 			cerr << "Error uploading IF data!" << endl;
 		}
 
-		if(!m_httpClient.upload(remoteLocationAGC, m_agcFilename, m_http_port, 0, m_bytesWrittenAGC,true)) {
+		if(!m_httpClient.upload(remoteLocationAGC, m_agcFilename, m_http_port, 0, m_bytesWrittenAGC, true, false)) {
 			cerr << "Error uploading AGC." << endl;
 		}
 	}
 
-	if( msgPayload == "halt") {
+	if( msgPayload == "pause") {
 		m_hwMgr.SetWrite(false);
 		m_hwMgr.RequestIFWriteBreak();
 	}
 	
 	if(msgPayload == "resume") {
 		m_hwMgr.SetWrite(true);
+	}
+
+	if(msgPayload == "halt") {
+		m_stopCond = true;
+	}
+
+	if(msgPayload == "profile_start") {
+		m_profilePoint = chrono::steady_clock::now();
+
+		m_mqttCtlr.Publish("alert", "profile_response", 0);
+	}
+
+	if(msgPayload == "profile_end") {
+		auto profileEnd = chrono::steady_clock::now();
+		chrono::duration<double> timeDiff = profileEnd - m_profilePoint;
+		cout << "Round trip MQTT msg took: " << timeDiff.count() << endl; 
 	}
 
 	return 0;

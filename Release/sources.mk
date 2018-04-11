@@ -20,11 +20,8 @@ CXX_DEPS :=
 S_UPPER_DEPS := 
 C_DEPS := 
 CPP_DEPS := 
-ELFSIZE := 
 
 # Every subdirectory with source files must be described here
 SUBDIRS := \
-.metadata/.plugins/org.eclipse.cdt.make.core \
-MZNT_http \
 src \
 

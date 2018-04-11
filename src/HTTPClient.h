@@ -14,7 +14,7 @@ class HTTPClient
     ~HTTPClient();
 
     bool upload(string address, string local_filename, int port,
-                unsigned long offset, unsigned long length, bool block);
+                unsigned long offset, unsigned long length, bool block, bool cancelCurr);
 
     static void *UploadHelper(void *context)
     {

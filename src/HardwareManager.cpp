@@ -28,11 +28,11 @@
 
 using namespace std;
 
-HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bool counterOn) : m_dataQueue(300)
+HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling) : m_dataQueue(300)
 {
 	// Initialize all member variables to default values.
 	m_counterOn = counterOn;
-	m_resamplingOn = true;
+	m_resamplingOn = resampling;
 	m_resampThreshold = 0x04000000;
 	m_initialized = false;
 
@@ -53,6 +53,8 @@ HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bo
 	m_writeOn = true;
 
 	m_conf_filename = conf_filename;
+
+	m_currIFFilename = m_IF_baseName;
 }
 
 HardwareManager::~HardwareManager()
@@ -314,7 +316,7 @@ void *HardwareManager::WriterThread()
 	static unsigned long lastBytesWritten = 0;
 	static unsigned int fileNo = 1;
 	unsigned int blockSize = 1 * BUFFER_BYTESIZE;
-	static string lastFilename = m_IF_baseName;
+	m_currIFFilename = m_IF_baseName;
 
 	// Set the contiguous buffer we have in RAM to be a DMA target buffer
 	// The underlying UDMABUF driver will keep this portion of ram syncd with the cache
@@ -335,7 +337,7 @@ void *HardwareManager::WriterThread()
 
 			// Push the last filename and update.
 			// push here
-			lastFilename = newName;
+			m_currIFFilename = newName;
 
 			// reset bytes written.
 			m_bytesWritten = 0;

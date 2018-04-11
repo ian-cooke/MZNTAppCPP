@@ -32,7 +32,7 @@ typedef struct AGCLogData
 class HardwareManager
 {
   public:
-	HardwareManager(string if_outFilename, string conf_filename, bool counterOn);
+	HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling);
 	virtual ~HardwareManager();
 
 	bool Start();
@@ -76,6 +76,8 @@ class HardwareManager
 
 	bool SetWrite(bool value) { m_writeOn = value; return true;}
 
+	string GetIFFilename() { return m_currIFFilename; }
+
   private:
 	bool ConfigureNT1065(bool verbose);
 
@@ -103,6 +105,8 @@ class HardwareManager
 	bool m_initialized;
 	int m_numErrors;
 	bool m_writeOn;
+
+	string m_currIFFilename;
 
 	pthread_t m_hwThread;
 	pthread_t m_writerThread;

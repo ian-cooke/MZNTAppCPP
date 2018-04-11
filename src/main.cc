@@ -106,7 +106,7 @@ int main(int argc, char **argv)
  	
 	LoggerController logger(node_name, if_file,agc_file, config_file, update_byte_size, 
 							num_pre_bytes,num_post_bytes, upload_refactory,
-							http_host, http_port, mqtt_host, mqtt_port, counter );
+							http_host, http_port, mqtt_host, mqtt_port, counter, resampling );
 
 	try {
 		if (!logger.Start())
@@ -128,6 +128,10 @@ int main(int argc, char **argv)
 
 			cout.flush();
 			cerr.flush();
+
+			if( logger.GetStopCond() ) {
+				break;
+			}
 
 			logger.Update(elapsed.count());
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));

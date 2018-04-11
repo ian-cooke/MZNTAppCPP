@@ -11,6 +11,7 @@ CPP_SRCS += \
 ../src/HardwareManager.cpp \
 ../src/LoggerController.cpp \
 ../src/MQTTController.cpp \
+../src/SerialManager.cpp \
 ../src/ThreadSafeQueue.cpp 
 
 CC_DEPS += \
@@ -21,6 +22,7 @@ OBJS += \
 ./src/HardwareManager.o \
 ./src/LoggerController.o \
 ./src/MQTTController.o \
+./src/SerialManager.o \
 ./src/ThreadSafeQueue.o \
 ./src/main.o 
 
@@ -29,6 +31,7 @@ CPP_DEPS += \
 ./src/HardwareManager.d \
 ./src/LoggerController.d \
 ./src/MQTTController.d \
+./src/SerialManager.d \
 ./src/ThreadSafeQueue.d 
 
 

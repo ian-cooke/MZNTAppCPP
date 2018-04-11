@@ -24,7 +24,7 @@ HTTPClient::~HTTPClient()
 }
 
 
-bool HTTPClient::upload( string address, string local_filename, int port, unsigned long offset, unsigned long length, bool block)
+bool HTTPClient::upload( string address, string local_filename, int port, unsigned long offset, unsigned long length, bool block, bool cancelCurr)
 {
     if(!m_uploading) {
         m_uploading = true;

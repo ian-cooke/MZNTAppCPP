@@ -1,3 +1,4 @@
 # Place in /mnt folder (or on drive)
 MZ_NAME="MZ1"
 TEST_NAME="TEST1"
+RUNTIME=3600

@@ -1,0 +1,17 @@
+petalinux-create -t project --name "name here" --template zynq
+petalinx-config
+-Set autologin (debug tweaks)
+-Set SD card (instead of RAMFS)
+petalinux-config -c kernel
+-Set 512 MB RMA allocation (device drivers/ general)
+petalinux-create -t apps --name chrony --enable 
+-Copy over chrony files
+petalinux-create -t apps --name mznt-logger --enable
+-copy over logger startup files
+petalinux-create -t apps --name logger-files --eanble
+- copy over usrdma module
+petalinux-create -t modules --name usrdma --enable
+- copy over user-changes.dtsi into recipes-bsp/device-tree
+-copy over mznt files (Configs, etc)
+petalinux-package --boot --fpga [path to bit file] --fsbl [path to fsbl im images] --u-boot --force
+
