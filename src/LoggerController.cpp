@@ -11,8 +11,10 @@
 #include "HardwareManager.h"
 
 #include <iostream>
+#include <vector>
 #include <string>
 #include <chrono>
+#include <sstream>
 #include <stdlib.h> // for abs
 #include <ctime>
 
@@ -23,7 +25,8 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 								   unsigned long numPostBytes,
 								   unsigned long uploadRefactorySec,
 								   string http_host, int http_port,
-								   string mqtt_host, int mqtt_port, bool counterOn, bool resampling) : m_hwMgr(ifFilename, config_filename, counterOn, resampling)
+								   string mqtt_host, int mqtt_port, bool counterOn, bool resampling, 
+								   int agc_threshold, int agc_updateHz, bool splitWrite) : m_hwMgr(ifFilename, config_filename, counterOn, resampling, splitWrite)
 {
 	m_nodeName = nodeName;
 	m_ifFilename = ifFilename;
@@ -46,8 +49,8 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 	m_numEvents = 0;
 	m_numUpdates = 0;
 	m_bytesWrittenAGC = 0;
-	m_agcUpdateRate = 0.5;
-	m_agcThreshold = 5;
+	m_agcUpdateRate = 1.0/(double)agc_updateHz;
+	m_agcThreshold = agc_threshold;
 	m_profilePoint = chrono::steady_clock::now();
 }
 
@@ -68,6 +71,10 @@ bool LoggerController::Start()
 	{
 		return false;
 	}
+
+	// Set the mqtt hw handle
+	HTTPClient::ms_hwHandle = &m_hwMgr;
+
 	// Start the MQTT subsystem.
 	if (!m_mqttCtlr.Start(m_mqtt_host.c_str(), m_nodeName.c_str(), "mznt", "rj39SZSz", this))
 	{
@@ -98,11 +105,7 @@ bool LoggerController::Start()
 		cerr << "Failed to initialize curl." << endl;
 	}
 
-	// Get the current time and sync time.
-	auto currentTime = chrono::system_clock::now();
-	std::time_t currTT = chrono::system_clock::to_time_t(currentTime);
-	// Display the current time.
-	cout << "Current time: " << ctime(&currTT) << endl;
+	
 
 	// Open AGC log file and overwrite what is there.
 	// Each update we make to AGC log file will open/close the file.
@@ -113,6 +116,15 @@ bool LoggerController::Start()
 	{
 		cerr << "HW init failed." << endl;
 	}
+
+	// Get the current time and sync time.
+	auto currentTime = m_hwMgr.GetTimeStart();
+	time_t currTT = chrono::system_clock::to_time_t(currentTime);
+	// Display the current time.
+	chrono::milliseconds ms = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch());
+	cout << "Current time: " << ctime(&currTT) << endl;
+	unsigned long long mscount = ms.count();
+	cout << "Num msec since epoch: " << dec << mscount << endl;
 
 	// Initialize the agc data.
 	AGCLogData initialData[4];
@@ -191,7 +203,7 @@ bool LoggerController::Update(double elapsed)
 					m_mqttCtlr.Publish( "leader" , "LOW-" + std::to_string(i),0);
 				}
 			}
-
+			
 			m_agcLast[i] = data[i];
  		}
 
@@ -200,7 +212,7 @@ bool LoggerController::Update(double elapsed)
 
 		// Publish.
 		string topic = m_nodeName + "-agc";
-		m_mqttCtlr.Publish(topic, "keepalive",0);
+		//m_mqttCtlr.Publish(topic, "keepalive",0);
 	}
 
 	return true;
@@ -216,6 +228,13 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 {
 	string msgPayload((char *)message->payload, message->payloadlen);
 	cout << "Msg Recv: " << msgPayload << endl;
+	vector<string> payloadTokens;
+	stringstream tokenStream(msgPayload);
+	string token;
+	while(getline(tokenStream,token,'-'))
+	{
+		payloadTokens.push_back(token);
+	}
 
 	// Check if this is an alert.
 	if ((msgPayload == "start") || (msgPayload == "update"))
@@ -309,6 +328,70 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 		auto profileEnd = chrono::steady_clock::now();
 		chrono::duration<double> timeDiff = profileEnd - m_profilePoint;
 		cout << "Round trip MQTT msg took: " << timeDiff.count() << endl; 
+	}
+
+	if(payloadTokens[0] == "full_pos")
+	{
+		// Convert time to ms
+
+		unsigned long currPos = m_hwMgr.GetBytesWritten();
+		cout << "Current position " << dec << currPos << endl;
+		// Upload this data.
+		// Upload Pre + Post chunk.
+		string remoteLocation = m_http_host + "/" + m_nodeName + ".full40.IF.bin";
+		unsigned long upSize = 640000000;
+
+		while ((m_hwMgr.GetBytesWritten() - currPos) < upSize)
+		{
+					// Busy wait.
+		}
+		string chfn = m_hwMgr.GetIFFilename() + ".CH_0";
+		if(!m_httpClient.upload(remoteLocation,chfn.c_str(), m_http_port, currPos, upSize, true, true))
+		{
+			cerr << "Error uploading IF data!" << endl;
+		}
+	}
+
+	if(payloadTokens[0] == "time_check_start")
+	{
+		// Get current time in ms since start
+		chrono::milliseconds ms = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch());
+		unsigned long long mscount = ms.count();
+		cout << "Num msec since epoch: " << dec << mscount << endl;
+		m_mqttCtlr.Publish("leader","time_check_response-"+to_string(mscount),0);
+	}
+
+	if(payloadTokens[0] == "time_check_end")
+	{
+		// Convert time to ms
+		unsigned long long msCenter = stoull(payloadTokens[1]);
+		cout << "Got request for data centered at: " << msCenter << endl;
+
+		// Find which block offset from start of file this is.
+		chrono::milliseconds msStart = chrono::duration_cast<chrono::milliseconds>(m_hwMgr.GetTimeStart().time_since_epoch());
+		unsigned long long timeDiff = msCenter -msStart.count();
+
+		cout << "The time offset from start is: " << timeDiff << " ms from start" << endl;
+
+		unsigned long blockOffset = (unsigned long)(timeDiff/m_hwMgr.GetMSPerBlock());
+		blockOffset = blockOffset * BUFFER_BYTESIZE;
+
+		cout << "The block offset is: " << blockOffset << " bytes from start" << endl;
+
+		// Upload this data.
+		// Upload Pre + Post chunk.
+		string remoteLocation = m_http_host + "/" + m_nodeName + ".timecheck.IF.bin";
+		unsigned long upSize = 128000000;
+
+		while ((m_hwMgr.GetBytesWritten() - blockOffset) < upSize)
+		{
+			// Busy wait.
+		}
+		string chfn = m_hwMgr.GetIFFilename() + ".CH_0";
+		if(!m_httpClient.upload(remoteLocation,chfn.c_str(), m_http_port, blockOffset, upSize, true, true))
+		{
+			cerr << "Error uploading IF data!" << endl;
+		}
 	}
 
 	return 0;

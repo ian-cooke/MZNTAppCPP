@@ -22,7 +22,7 @@ public:
                       string config_filename, unsigned long numUpdateBytes, unsigned long numPreBytes,
                       unsigned long numPostBytes, unsigned long uploadRefactorySec,
                       string http_host, int http_port,
-                      string mqtt_host, int mqtt_port, bool counterOn, bool resampling );
+                      string mqtt_host, int mqtt_port, bool counterOn, bool resampling, int agc_threshold, int agc_updateHz, bool splitWrite );
     ~LoggerController();
 
     int MQTT_Callback( void * context, char *topicName, int topicLen, MQTTClient_message *message );
@@ -40,6 +40,7 @@ private:
     MQTTController m_mqttCtlr;
     HardwareManager m_hwMgr;
     HTTPClient m_httpClient;
+    
     ofstream m_agcLogFile;
     string m_nodeName;
     string m_ifFilename;
@@ -54,7 +55,7 @@ private:
     int m_agcThreshold;
     AGCLogData m_agcLast[4];
     chrono::time_point<chrono::steady_clock> m_profilePoint;
-    chrono::time_point<chrono::system_clock> m_eventTimes[4];
+    chrono::time_point<chrono::steady_clock> m_eventTimes[4];
     double m_agcUpdateRate;
     unsigned long m_numEvents;
     unsigned long m_numUpdates;

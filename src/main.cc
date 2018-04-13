@@ -21,23 +21,25 @@ int main(int argc, char **argv)
 	string agc_file("/mnt/AGC");
 	string config_file = "/etc/ConfigSet10.txt";
 	string node_name("mz0");
-	unsigned int resamp_threshold = 0x04000000;
+	unsigned int resamp_threshold = 0x00008000;
 	unsigned long runtime = 3600;
 	bool counter = false;
 	bool resampling = true;
-	int agc_alert_thresh = 9;
 	unsigned int upload_refactory = 120; 
 	string http_host("gnssfast.colorado.edu");
 	string mqtt_host("gnssfast.colorado.edu");
 	int http_port = 1337;
 	int mqtt_port = 5554;
+	int agc_updateHz = 5;
 	int result;
+	int agc_threshold = 5;
 	unsigned long update_byte_size = 16000000*8;
 	unsigned long num_pre_bytes = 16000000*8;
+	bool splitWrite = false;
 	unsigned long num_post_bytes = 16000000*8;
 
 	// Parse the command line options.
-	while ((result = getopt(argc, argv, "o:s:c:t:anh:q:i:e:N:u:m:p:P:")) > 0)
+	while ((result = getopt(argc, argv, "o:s:c:t:anh:q:i:e:N:u:m:p:P:S")) > 0)
 	{
 		switch (result)
 		{
@@ -66,7 +68,7 @@ int main(int argc, char **argv)
 			agc_file = optarg;
 			break;
 		case 'i':
-			agc_alert_thresh = atoi(optarg);
+			agc_threshold = atoi(optarg);
 			break;
 		case 'e':
 			upload_refactory = (unsigned int)atoi(optarg);
@@ -86,6 +88,9 @@ int main(int argc, char **argv)
 		case 'P':
 			mqtt_port = atoi(optarg);
 			break;
+		case 'S':
+			splitWrite = true;
+			break;
 		}
 	}
 
@@ -98,15 +103,16 @@ int main(int argc, char **argv)
 	cout << "MQTT Host: " << mqtt_host << " at port: " << mqtt_port << endl;
 	cout << "Upload Refactory Time: " << (int) upload_refactory << endl;
 	cout << "Node name: " << node_name << endl; 
-	cout << "AGC Alert threshold: " << agc_alert_thresh << endl;
+	cout << "AGC Alert threshold: " << agc_threshold << endl;
 	cout << "Counter on: " << counter << endl;
 	cout << "Normal update size: " << (update_byte_size/1000000) << " mb " <<endl;
 	cout << "Event (pre) data size: " << (num_pre_bytes/1000000) << " mb" << endl;
-	//cout << "Event (post) data size: " << 
+	cout << "SPLIT Write mode is: " << splitWrite << endl;
+	cout << "AGC Update rate is:" << agc_updateHz << " hz." << endl;
  	
 	LoggerController logger(node_name, if_file,agc_file, config_file, update_byte_size, 
 							num_pre_bytes,num_post_bytes, upload_refactory,
-							http_host, http_port, mqtt_host, mqtt_port, counter, resampling );
+							http_host, http_port, mqtt_host, mqtt_port, counter, resampling, agc_threshold, agc_updateHz, splitWrite );
 
 	try {
 		if (!logger.Start())

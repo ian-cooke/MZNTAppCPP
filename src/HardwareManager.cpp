@@ -21,19 +21,31 @@
 #include <unistd.h>
 #include <fstream>
 #include <chrono>
+#include <iomanip>
+#include <limits>
 
 #include "HardwareManager.h"
 #include "system_defines.h"
 #include "ThreadSafeQueue.h"
 
+#define CHANNEL_BUF_SIZE 65536
+#define CH_1_START 0
+#define CH_1_END   65535
+#define CH_2_START 65536
+#define CH_2_END   131071
+#define CH_3_START 131072
+#define CH_3_END   196607
+#define CH_4_START 196608
+#define CH_4_END   262141	
+
 using namespace std;
 
-HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling) : m_dataQueue(300)
+HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling, bool splitWrite) : m_dataQueue(DDR_Q_SIZE)
 {
 	// Initialize all member variables to default values.
 	m_counterOn = counterOn;
 	m_resamplingOn = resampling;
-	m_resampThreshold = 0x04000000;
+	m_resampThreshold = 0x00008000;
 	m_initialized = false;
 
 	m_AGC_fileName = "/mnt/AGC.bin";
@@ -51,6 +63,19 @@ HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bo
 	m_bytesWritten = 0;
 	m_numErrors = 0;
 	m_writeOn = true;
+	m_requantize =true;
+
+	// Calculate our ms per block.
+	double samplingRate = 7.95e6;
+	// convert to ms / sample.
+	double msSample = 1.0/(samplingRate/1e3);
+
+	double bytesPerSample = 2.0; // This is total bytes for 1 sample of ALL FOUR channels.
+	m_msPerBlock = msSample*(1/bytesPerSample)*((double)BUFFER_BYTESIZE);
+
+	cout << "Milliseconds per block is: " <<fixed<<setprecision(2)<< m_msPerBlock << endl;
+
+	m_writeSplit = splitWrite;
 
 	m_conf_filename = conf_filename;
 
@@ -131,6 +156,25 @@ void *HardwareManager::HWThread()
 	unsigned long queueIndex = 0;
 	unsigned long loopCnt = 0;
 
+	int res = 0;
+	struct sched_param params;
+	params.sched_priority = 90;
+
+	// Get the curent limit
+	struct rlimit limits;
+	getrlimit(RLIMIT_RTPRIO, &limits);
+
+	printf("This threads RT PRIO Cur: %ld, Max: %ld\n", limits.rlim_cur, limits.rlim_max);
+
+	res = pthread_setschedparam(pthread_self(), SCHED_RR, &params);
+
+	if (res != 0)
+	{
+		printf("WARNING: Failed to set thread RT policy and priority.\n");
+		printf("Errno: %d\n", errno);
+		return NULL;
+	}
+
 	while (!m_stopSignal)
 	{
 		// Busy poll the interrupt.
@@ -210,7 +254,7 @@ void *HardwareManager::HWThread()
 		}
 
 		// Ensure we don't overwrite the DDR Buffer.
-		while (m_dataQueue.size() == DDR_Q_SIZE-2)
+		while (m_dataQueue.size() == DDR_Q_SIZE)
 		{
 			cerr << "Queue full, wait for transfer." << endl;
 			//m_numErrors++;
@@ -256,7 +300,7 @@ void *HardwareManager::HWThread()
 		m_dataQueue.push(((char *)m_ddrBaseOff + queueIndex * BUFFER_BYTESIZE));
 
 		// Inc queue index
-		queueIndex = (queueIndex + 1) % (DDR_Q_SIZE-2);
+		queueIndex = (queueIndex + 1) % (DDR_Q_SIZE);
 
 		/*if(loopCnt%200 == 0) {
 			cout <<"OK" << endl;
@@ -308,11 +352,18 @@ void *HardwareManager::WriterThread()
 		cerr << "Could not open the IF data output file." << endl;
 		return NULL;
 	}*/
-
-	ofstream outputFile;
+	int numFiles = 1;
+	if(m_writeSplit) {
+		numFiles = 4;
+	}
+	ofstream outputFile[numFiles];
 
 	// The first open will overwrite any file with this name.
-	outputFile.open(m_IF_baseName.c_str(), ios::out | ios::binary);
+	for(int i=0; i< numFiles; i++){
+		string filename = m_IF_baseName + ".CH_" + to_string(i);
+		outputFile[i].open( filename.c_str(), ios::out | ios::binary);
+	}
+
 	static unsigned long lastBytesWritten = 0;
 	static unsigned int fileNo = 1;
 	unsigned int blockSize = 1 * BUFFER_BYTESIZE;
@@ -324,14 +375,19 @@ void *HardwareManager::WriterThread()
 	SetSyncDir();
 	SetSyncSize(blockSize);
 	auto startTime = chrono::steady_clock::now();
-	while (!m_stopSignal)
+	while (1)
 	{
 		if(m_breakFileSignal) {
 			// Close the file.
-			outputFile.close();
-			string newName = m_IF_baseName + "." + to_string(fileNo);
-			cout << "Opening new file: " + newName << endl;
-			outputFile.open(newName.c_str(), ios::out | ios::binary );
+			string newName =  m_IF_baseName + "." + to_string(fileNo);
+			for(int i=0; i<numFiles; i++) 
+			{
+				outputFile[i].close();
+				string newFN = newName + "." + to_string(fileNo) ;
+				cout << "Opening new file: " + newFN << endl;
+				outputFile[i].open(newFN.c_str(), ios::out | ios::binary );
+			}
+			
 			fileNo++;
 			m_breakFileSignal = false;
 
@@ -358,7 +414,16 @@ void *HardwareManager::WriterThread()
 		SetSyncOffset((unsigned long)nextData - (unsigned long)m_ddrBaseOff);
 		SyncForCPU();
 		if(m_writeOn){
-			outputFile.write(nextData, streamsize(blockSize));
+			if(!m_writeSplit) {
+				outputFile[0].write(nextData, streamsize(blockSize));
+			}
+			else {
+				for(int i=0; i < numFiles; i++ ) 
+				{
+					char *dataStart = nextData+i*CHANNEL_BUF_SIZE;
+					outputFile[i].write(dataStart, streamsize(CHANNEL_BUF_SIZE));
+				}			
+			}
 			m_bytesWritten += blockSize;
 		}
 
@@ -377,7 +442,9 @@ void *HardwareManager::WriterThread()
 	}
 
 	//fclose(writeFile);
-	outputFile.close();
+	for( int i= 1; i < numFiles; i++){
+		outputFile[i].close();
+	}
 
 	cout << "Writer thread exiting." << endl;
 
@@ -558,10 +625,11 @@ bool HardwareManager::InitializeHardware()
 //-------------------------------------------------------------------------------------------------------------
 bool HardwareManager::Start()
 {
-
-	pthread_create(&m_hwThread, NULL, HardwareManager::HWThread_Helper, (void *)this);
+	m_timeStart = chrono::system_clock::now();
 
 	pthread_create(&m_writerThread, NULL, HardwareManager::WriterThread_Helper, (void *)this);
+
+	pthread_create(&m_hwThread, NULL, HardwareManager::HWThread_Helper, (void *)this);
 
 	cout << "Created HW and Writer thread." << endl;
 
@@ -884,10 +952,11 @@ bool HardwareManager::ConfigureFPGASettings()
 
 	if (m_counterOn == true)
 	{
+		// COUNTER ON
 		printf("Setting counter to ON.\n");
 		if (m_resamplingOn == true)
 		{
-			*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000002; // Turn on counter mode w/o resampling 0b10
+				*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000002; // Turn on counter mode w/o resampling 0b10
 		}
 		else
 		{
@@ -896,13 +965,29 @@ bool HardwareManager::ConfigureFPGASettings()
 	}
 	else
 	{
+		// COUNTER OFF
 		if (m_resamplingOn == true)
 		{
-			*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000000; //Ensure that the counter is off w/o resampling 0b00
+			if(m_writeSplit == false) {
+				cout << "Programming all zeros" << endl;
+				*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000000; //Ensure that the counter is off w/o resampling 0b00
+			} else {
+				if(m_requantize){
+					cout <<"Programming with requant."<<endl;
+					*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000018; //Ensure that the counter is off w/o resampling 0b00
+				} else {
+					*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000010; //Ensure that the counter is off w/o resampling 0b00
+				}
+			}
+
 		}
 		else
 		{
-			*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000001; // Ensure counter off w/ resampling 0b01
+			if(m_writeSplit == false) {
+				*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000001; // Ensure counter off w/o resampling 0b01
+			}else{
+				*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000011;
+			}
 		}
 	}
 

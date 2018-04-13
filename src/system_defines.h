@@ -46,11 +46,11 @@
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
 
-#define DDR_Q_SIZE 1900
+#define DDR_Q_SIZE 20
 //#define DDR_Q_SIZE 300
 #define DDR_MAP_SIZE_Q DDR_Q_SIZE*BUFFER_BYTESIZE /* = 40 * 256k ~10.5mb */
 
-#define BRAM_BASE_ADDRESS    0xC0000000
+#define BRAM_BASE_ADDRESS    0xc0000000
 #define BRAM_MAP_MASK (BRAM_MAP_SIZE - 1)
 
 #define OUTFNAME "/mnt/IFdata.bin"

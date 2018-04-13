@@ -4,6 +4,11 @@
 #include <iostream>
 #include <fstream>
 
+// Initialize statics
+size_t HTTPClient::ms_uploadSize = 0;
+size_t HTTPClient::ms_total = 0;
+HardwareManager *HTTPClient::ms_hwHandle = NULL;
+
 HTTPClient::HTTPClient() 
 {
     m_uploading = false;
@@ -33,6 +38,8 @@ bool HTTPClient::upload( string address, string local_filename, int port, unsign
         m_localFilename = local_filename;
         m_remoteAddress = address;
         m_port = port;
+        HTTPClient::ms_uploadSize = length;
+        HTTPClient::ms_total = 0;
         pthread_t id;
          // Create thread
         pthread_create(&id, NULL, HTTPClient::UploadHelper, (void*)this);
@@ -71,12 +78,14 @@ void* HTTPClient::easy_worker(void* parameters)
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
         curl_easy_setopt(curl, CURLOPT_URL, m_remoteAddress.c_str() );
-
+        cout << "Setting upload size to " << dec << (curl_off_t)m_uploadSize << endl;
         curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)m_uploadSize );
-        /* set where to read from */
         
         curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
 
+        // Limit the upload speed so we don't kill the HDD speed
+        //curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, 1000000);
+        curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, CURL_MAX_READ_SIZE);
         ifstream infile;
 
         infile.open(m_localFilename.c_str(), ifstream::in | ifstream::binary );
@@ -84,6 +93,7 @@ void* HTTPClient::easy_worker(void* parameters)
         if(!infile.is_open()) {
             cerr<<"Could not open file for reading." <<endl;
         } else {
+        	cout << "Seeking to: " << m_uploadOffset << endl;
             infile.seekg(m_uploadOffset);
             curl_easy_setopt(curl, CURLOPT_READDATA, &infile);
             CURLcode res = curl_easy_perform(curl);

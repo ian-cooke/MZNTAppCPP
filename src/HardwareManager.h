@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <string>
+#include <chrono>
 #include "ThreadSafeQueue.h"
 
 using namespace std;
@@ -32,7 +33,7 @@ typedef struct AGCLogData
 class HardwareManager
 {
   public:
-	HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling);
+	HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling, bool splitWrite);
 	virtual ~HardwareManager();
 
 	bool Start();
@@ -78,6 +79,12 @@ class HardwareManager
 
 	string GetIFFilename() { return m_currIFFilename; }
 
+	double GetMSPerBlock() { return m_msPerBlock; }
+
+	chrono::time_point<chrono::system_clock> GetTimeStart() { return m_timeStart; }
+
+	unsigned int GetDataQueueSize() { return m_dataQueue.size(); }
+
   private:
 	bool ConfigureNT1065(bool verbose);
 
@@ -105,6 +112,9 @@ class HardwareManager
 	bool m_initialized;
 	int m_numErrors;
 	bool m_writeOn;
+	bool m_requantize;
+
+	double m_msPerBlock;
 
 	string m_currIFFilename;
 
@@ -113,6 +123,8 @@ class HardwareManager
 	bool m_stopSignal;
 	bool m_breakFileSignal;
 
+	bool m_writeSplit;
+
 	unsigned long m_bytesWritten;
 	
 
@@ -120,6 +132,7 @@ class HardwareManager
 
 	//std::queue <char*> m_dataQueue;
 	ThreadSafeQueue m_dataQueue;
+	chrono::time_point<chrono::system_clock> m_timeStart;
 
 	/* MMAPED FPGA and DDR Peripherals */
 	/* These are virtual addresses (MMAP)*/

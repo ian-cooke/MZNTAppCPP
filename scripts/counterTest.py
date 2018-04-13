@@ -1,7 +1,5 @@
 import struct
 import sys
-from tqdm import tqdm
-from tqdm import trange
 import os
 
 if __name__ == '__main__':
