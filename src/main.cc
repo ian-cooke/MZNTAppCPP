@@ -21,8 +21,8 @@ int main(int argc, char **argv)
 	string agc_file("/mnt/AGC");
 	string config_file = "/etc/ConfigSet10.txt";
 	string node_name("mz0");
-	unsigned int resamp_threshold = 0x00008000;
-	unsigned long runtime = 3600;
+	unsigned int resamp_threshold = 0x0000002000;
+	double runtime = 3600;
 	bool counter = false;
 	bool resampling = true;
 	unsigned int upload_refactory = 120; 

@@ -46,7 +46,7 @@
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
 
-#define DDR_Q_SIZE 20
+#define DDR_Q_SIZE 1900
 //#define DDR_Q_SIZE 300
 #define DDR_MAP_SIZE_Q DDR_Q_SIZE*BUFFER_BYTESIZE /* = 40 * 256k ~10.5mb */
 
