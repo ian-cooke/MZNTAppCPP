@@ -85,7 +85,7 @@ void* HTTPClient::easy_worker(void* parameters)
 
         // Limit the upload speed so we don't kill the HDD speed
         //curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, 1000000);
-        curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, CURL_MAX_READ_SIZE);
+        //curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, CURL_MAX_READ_SIZE);
         ifstream infile;
 
         infile.open(m_localFilename.c_str(), ifstream::in | ifstream::binary );
