@@ -45,7 +45,7 @@ HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bo
 	// Initialize all member variables to default values.
 	m_counterOn = counterOn;
 	m_resamplingOn = resampling;
-	m_resampThreshold = 0x00008000;
+	m_resampThreshold = 0x00002000;
 	m_initialized = false;
 
 	m_AGC_fileName = "/mnt/AGC.bin";
@@ -63,7 +63,7 @@ HardwareManager::HardwareManager(string if_outFilename, string conf_filename, bo
 	m_bytesWritten = 0;
 	m_numErrors = 0;
 	m_writeOn = true;
-	m_requantize =true;
+	m_requantize =false;
 
 	// Calculate our ms per block.
 	double samplingRate = 7.95e6;
@@ -974,9 +974,10 @@ bool HardwareManager::ConfigureFPGASettings()
 			} else {
 				if(m_requantize){
 					cout <<"Programming with requant."<<endl;
-					*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000018; //Ensure that the counter is off w/o resampling 0b00
+					*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000018; //Ensure resampling/requant 11000
 				} else {
-					*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000010; //Ensure that the counter is off w/o resampling 0b00
+					cout <<"Programming without requant" << endl;
+					*((mapped_ctr_base + AXI_GPIO0_REG2_OFFSET)) = 0x00000010; //
 				}
 			}
 
