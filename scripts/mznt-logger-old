@@ -39,7 +39,7 @@ start)
         echo $TEST_NAME
 		echo $RUNTIME
 
-        MZ_OPTS+="-o /mnt/$MZ_NAME.$TEST_NAME.IF -q /mnt/$MZ_NAME.$TEST_NAME.AGC -N $MZ_NAME -s $RUNTIME -S -c /etc/ConfigSet01.txt"
+        MZ_OPTS+="-o /mnt/$MZ_NAME.$TEST_NAME.IF -q /mnt/$MZ_NAME.$TEST_NAME.AGC -N $MZ_NAME -s $RUNTIME"
 	else
 	  echo "---------------MZNTLogger ERROR: No drive mounted.--------------"
 	fi
