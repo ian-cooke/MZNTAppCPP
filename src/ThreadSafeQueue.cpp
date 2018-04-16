@@ -6,10 +6,12 @@
  */
 #include "ThreadSafeQueue.h"
 #include <iostream>
+#include "ThreadPool.h"
 
 using namespace std;
 
-ThreadSafeQueue::ThreadSafeQueue(unsigned int size) {
+template <class T>
+ThreadSafeQueue<T>::ThreadSafeQueue(unsigned int size) {
     m_maxSize = size;
 
     pthread_mutex_init(&m_lock, NULL);
@@ -19,14 +21,16 @@ ThreadSafeQueue::ThreadSafeQueue(unsigned int size) {
     pthread_cond_init(&m_condp,NULL);
 }
 
-ThreadSafeQueue::~ThreadSafeQueue() {
+template <class T>
+ThreadSafeQueue<T>::~ThreadSafeQueue() {
     pthread_mutex_destroy(&m_lock);
 
     pthread_cond_destroy( &m_condc);
     pthread_cond_destroy( &m_condp);
 }
 
-bool ThreadSafeQueue::push(char *value) 
+template <class T>
+bool ThreadSafeQueue<T>::push(T value) 
 {
     // Acquire lock
     pthread_mutex_lock( &m_lock );
@@ -47,7 +51,8 @@ bool ThreadSafeQueue::push(char *value)
     return true;
 }
 
-char *ThreadSafeQueue::pop_front() {
+template <class T>
+T ThreadSafeQueue<T>::pop_front() {
     pthread_mutex_lock(&m_lock);
 
     while(m_tsQueue.empty()) {
@@ -55,7 +60,7 @@ char *ThreadSafeQueue::pop_front() {
         pthread_cond_wait(&m_condc,&m_lock);
     }
 
-    char *retValue = m_tsQueue.front();
+    T retValue = m_tsQueue.front();
     m_tsQueue.pop();
 
     pthread_mutex_unlock(&m_lock);
@@ -64,3 +69,6 @@ char *ThreadSafeQueue::pop_front() {
 
     return retValue;
 }
+
+template class ThreadSafeQueue<char*>;
+template class ThreadSafeQueue<Task*>;

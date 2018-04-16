@@ -11,14 +11,15 @@
 #include <pthread.h>   
 #include <queue>
 
+template <class T>
 class ThreadSafeQueue {
 public:
     ThreadSafeQueue(unsigned int size);
     ~ThreadSafeQueue();
 
-    bool push(char *value);
+    bool push(T value);
 
-    char *pop_front();
+    T pop_front();
 
     unsigned int size() {
         pthread_mutex_lock(&m_lock);
@@ -31,7 +32,7 @@ private:
     pthread_mutex_t m_lock;
     pthread_cond_t m_condc;
     pthread_cond_t m_condp;
-    std::queue <char*>m_tsQueue;
+    std::queue <T>m_tsQueue;
     unsigned int m_maxSize;
 };
 
