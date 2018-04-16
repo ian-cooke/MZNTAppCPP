@@ -15,10 +15,11 @@
 #include <string>
 #include <chrono>
 #include "ThreadSafeQueue.h"
+#include "system_defines.h"
 
 using namespace std;
 
-//#pragma pack(push, 1)
+//#pragma pack(1)
 typedef struct AGCLogData
 {
 	uint64_t ms_truncated; // ~49 days to overflow
@@ -30,10 +31,16 @@ typedef struct AGCLogData
 	uint8_t ifAGC;		   //IF Agc value (Reg 10)
 } AGCLogData;
 
+typedef struct AGCTransmit
+{
+	uint64_t ms_truncated;
+	uint8_t ifAGC[4];
+} AGCTransmit;
+
 class HardwareManager
 {
   public:
-	HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling, bool splitWrite);
+	HardwareManager(string if_outFilename, string conf_filename, bool counterOn, bool resampling, bool splitWrite, unsigned int resamp_threshold);
 	virtual ~HardwareManager();
 
 	bool Start();
@@ -65,7 +72,9 @@ class HardwareManager
 		return ((HardwareManager *)context)->WriterThread();
 	}
 
-	unsigned long GetBytesWritten() { return m_bytesWritten; }
+	unsigned long long GetBytesWritten() { return m_bytesWritten; }
+	unsigned long GetCurrFileOffset() { return (unsigned long)(m_bytesWritten / 4); }
+	unsigned long GetMaxSingleFileSize() {return (unsigned long)(m_maxFileSize/4);}
 	bool InitializeHardware();
 
 	bool GetErrorState() { return (m_numErrors > 0); }
@@ -85,6 +94,10 @@ class HardwareManager
 
 	unsigned int GetDataQueueSize() { return m_dataQueue.size(); }
 
+	string GetLastIFFilename() { if(m_fileHistory.size()<1){return m_currIFFilename;}
+							     return m_fileHistory[m_fileHistory.size()-2];}
+
+	unsigned int GetFileHistorySize() { return m_fileHistory.size(); }
   private:
 	bool ConfigureNT1065(bool verbose);
 
@@ -106,13 +119,19 @@ class HardwareManager
 	string m_IF_baseName;
 	string m_udmaFilename;
 	const char *m_AGC_fileName;
+
 	bool m_counterOn;
 	bool m_resamplingOn;
+
 	uint32_t m_resampThreshold;
 	bool m_initialized;
+
 	int m_numErrors;
 	bool m_writeOn;
 	bool m_requantize;
+	bool m_useCwrite;
+
+	unsigned short m_numOutFiles;
 
 	double m_msPerBlock;
 
@@ -125,13 +144,15 @@ class HardwareManager
 
 	bool m_writeSplit;
 
-	unsigned long m_bytesWritten;
-	
+	unsigned long long m_bytesWritten;
+	unsigned long long m_maxFileSize;
+
 
 	string m_conf_filename;
 
-	//std::queue <char*> m_dataQueue;
-	ThreadSafeQueue m_dataQueue;
+	std::vector<string> m_fileHistory;
+
+	ThreadSafeQueue<char*> m_dataQueue;
 	chrono::time_point<chrono::system_clock> m_timeStart;
 
 	/* MMAPED FPGA and DDR Peripherals */
