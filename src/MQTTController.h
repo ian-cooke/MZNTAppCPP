@@ -10,7 +10,7 @@
 #include <string>
 #include <iostream>
 #include <MQTTClient.h>
-\
+#include <pthread.h>
 using namespace std;
 
 class MQTTMsgHandler
@@ -30,6 +30,7 @@ public:
     bool Connect();
 
     bool Publish( string topic, string message, int qos );
+    bool Publish( string topic, unsigned char *data, size_t length, int qos );
     bool Subscribe( string topic );
 
 private:

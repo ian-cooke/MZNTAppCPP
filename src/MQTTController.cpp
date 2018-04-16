@@ -138,3 +138,13 @@ bool MQTTController::Publish( string topic, string message, int qos )
 
     return true;
 }
+bool MQTTController::Publish( string topic, unsigned char *data, size_t length, int qos )
+{
+    int result;
+    result = MQTTClient_publish( m_paho_client, topic.c_str(), length, (void*)data, qos, 0, NULL);
+    if( result != MQTTCLIENT_SUCCESS ){
+        return false;
+    }
+
+    return true;
+}
