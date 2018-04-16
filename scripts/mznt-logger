@@ -20,7 +20,7 @@ start)
     # insert kernel module
 	if [ -e /lib/modules/4.9.0-xilinx-v2017.4/extra/usrdma.ko ]
 	then
-	  insmod /lib/modules/4.9.0-xilinx-v2017.4/extra/usrdma.ko udmabuf0=500000000
+	  insmod /lib/modules/4.9.0-xilinx-v2017.4/extra/usrdma.ko udmabuf0=130000000
 	else
 	  echo "------------------No udmabuf module found-------------------------------"
 	fi

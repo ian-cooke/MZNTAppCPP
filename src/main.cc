@@ -33,10 +33,10 @@ int main(int argc, char **argv)
 	int agc_updateHz = 5;
 	int result;
 	int agc_threshold = 5;
-	unsigned long update_byte_size = 16000000*8;
-	unsigned long num_pre_bytes = 16000000*8;
+	unsigned long update_byte_size = 43000000;
+	unsigned long num_pre_bytes = 43000000;
 	bool splitWrite = false;
-	unsigned long num_post_bytes = 16000000*8;
+	unsigned long num_post_bytes = 11000000;
 
 	// Parse the command line options.
 	while ((result = getopt(argc, argv, "o:s:c:t:anh:q:i:e:N:u:m:p:P:S")) > 0)
@@ -112,7 +112,7 @@ int main(int argc, char **argv)
  	
 	LoggerController logger(node_name, if_file,agc_file, config_file, update_byte_size, 
 							num_pre_bytes,num_post_bytes, upload_refactory,
-							http_host, http_port, mqtt_host, mqtt_port, counter, resampling, agc_threshold, agc_updateHz, splitWrite );
+							http_host, http_port, mqtt_host, mqtt_port, counter, resampling, agc_threshold, agc_updateHz, splitWrite, resamp_threshold );
 
 	try {
 		if (!logger.Start())

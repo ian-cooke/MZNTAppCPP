@@ -34,6 +34,7 @@
 									<listOptionValue builtIn="false" value="../lib/inc/paho"/>
 								</option>
 								<option id="xilinx.gnu.compiler.misc.other.138442946" name="Other flags" superClass="xilinx.gnu.compiler.misc.other" value="-c -fmessage-length=0 -MT&quot;$@&quot; -mno-unaligned-access" valueType="string"/>
+								<option id="xilinx.gnu.compiler.option.optimization.flags.1395722621" name="Other optimization flags" superClass="xilinx.gnu.compiler.option.optimization.flags" value="" valueType="string"/>
 								<inputType id="xilinx.gnu.armv7.linux.cxx.compiler.input.45957161" name="C++ source files" superClass="xilinx.gnu.armv7.linux.cxx.compiler.input"/>
 							</tool>
 							<tool id="xilinx.gnu.armv7.linux.toolchain.archiver.65214393" name="ARM v7 Linux archiver" superClass="xilinx.gnu.armv7.linux.toolchain.archiver"/>
@@ -81,30 +82,30 @@
 					<folderInfo id="xilinx.gnu.armv7.linux.exe.release.1151010121." name="/" resourcePath="">
 						<toolChain id="xilinx.gnu.armv7.linux.toolchain.500745333" name="Xilinx ARM v7 GNU/Linux Toolchain" superClass="xilinx.gnu.armv7.linux.toolchain">
 							<targetPlatform binaryParser="com.xilinx.sdk.managedbuilder.XELF.arm.a53.x32.linux" id="xilinx.armv7.linux.target.gnu.base.738468143" isAbstract="false" name="Debug Platform" superClass="xilinx.armv7.linux.target.gnu.base"/>
-							<builder buildPath="${workspace_loc:/MZNTAppCPP}/Release" enableAutoBuild="true" id="xilinx.gnu.make.2141708033" superClass="xilinx.gnu.make"/>
+							<builder buildPath="${workspace_loc:/MZNTAppCPP}/Release" enableAutoBuild="true" id="xilinx.gnu.make.2141708033" keepEnvironmentInBuildfile="false" name="GNU make" superClass="xilinx.gnu.make"/>
 							<tool id="xilinx.gnu.armv7.linux.c.toolchain.assembler.209215956" name="ARM v7 Linux gcc assembler" superClass="xilinx.gnu.armv7.linux.c.toolchain.assembler">
 								<inputType id="xilinx.gnu.assembler.input.1139561155" superClass="xilinx.gnu.assembler.input"/>
 							</tool>
 							<tool id="xilinx.gnu.armv7.linux.c.toolchain.compiler.1604864620" name="ARM v7 Linux gcc compiler" superClass="xilinx.gnu.armv7.linux.c.toolchain.compiler">
-								<option defaultValue="gnu.c.optimization.level.more" id="xilinx.gnu.compiler.option.optimization.level.980592854" superClass="xilinx.gnu.compiler.option.optimization.level" valueType="enumerated"/>
-								<option id="xilinx.gnu.compiler.option.debugging.level.1433330957" superClass="xilinx.gnu.compiler.option.debugging.level" value="gnu.c.debugging.level.none" valueType="enumerated"/>
+								<option defaultValue="gnu.c.optimization.level.more" id="xilinx.gnu.compiler.option.optimization.level.980592854" name="Optimization Level" superClass="xilinx.gnu.compiler.option.optimization.level" valueType="enumerated"/>
+								<option id="xilinx.gnu.compiler.option.debugging.level.1433330957" name="Debug Level" superClass="xilinx.gnu.compiler.option.debugging.level" value="gnu.c.debugging.level.none" valueType="enumerated"/>
 							</tool>
 							<tool id="xilinx.gnu.armv7.linux.cxx.toolchain.compiler.1478065219" name="ARM v7 Linux g++ compiler" superClass="xilinx.gnu.armv7.linux.cxx.toolchain.compiler">
-								<option id="xilinx.gnu.compiler.dircategory.includes.1867126595" superClass="xilinx.gnu.compiler.dircategory.includes" valueType="includePath">
+								<option id="xilinx.gnu.compiler.dircategory.includes.1867126595" name="Include Paths" superClass="xilinx.gnu.compiler.dircategory.includes" valueType="includePath">
 									<listOptionValue builtIn="false" value="../lib/inc"/>
 									<listOptionValue builtIn="false" value="../lib/inc/paho"/>
 								</option>
-								<option defaultValue="gnu.c.optimization.level.more" id="xilinx.gnu.compiler.option.optimization.level.888557184" superClass="xilinx.gnu.compiler.option.optimization.level" valueType="enumerated"/>
-								<option id="xilinx.gnu.compiler.option.debugging.level.1767699931" superClass="xilinx.gnu.compiler.option.debugging.level" value="gnu.c.debugging.level.none" valueType="enumerated"/>
+								<option defaultValue="gnu.c.optimization.level.more" id="xilinx.gnu.compiler.option.optimization.level.888557184" name="Optimization Level" superClass="xilinx.gnu.compiler.option.optimization.level" valueType="enumerated"/>
+								<option id="xilinx.gnu.compiler.option.debugging.level.1767699931" name="Debug Level" superClass="xilinx.gnu.compiler.option.debugging.level" value="gnu.c.debugging.level.none" valueType="enumerated"/>
 								<inputType id="xilinx.gnu.armv7.linux.cxx.compiler.input.972627922" name="C++ source files" superClass="xilinx.gnu.armv7.linux.cxx.compiler.input"/>
 							</tool>
 							<tool id="xilinx.gnu.armv7.linux.toolchain.archiver.728633772" name="ARM v7 Linux archiver" superClass="xilinx.gnu.armv7.linux.toolchain.archiver"/>
 							<tool id="xilinx.gnu.armv7.linux.c.toolchain.linker.897022416" name="ARM v7 Linux gcc linker" superClass="xilinx.gnu.armv7.linux.c.toolchain.linker"/>
 							<tool id="xilinx.gnu.armv7.linux.cxx.toolchain.linker.1050764093" name="ARM v7 Linux g++ linker" superClass="xilinx.gnu.armv7.linux.cxx.toolchain.linker">
-								<option id="xilinx.gnu.c.link.option.libs.821993598" superClass="xilinx.gnu.c.link.option.libs" valueType="libs">
+								<option id="xilinx.gnu.c.link.option.libs.821993598" name="Libraries (-l)" superClass="xilinx.gnu.c.link.option.libs" valueType="libs">
 									<listOptionValue builtIn="false" value="pthread"/>
 								</option>
-								<option id="xilinx.gnu.c.link.option.userobjs.1309253696" superClass="xilinx.gnu.c.link.option.userobjs" valueType="userObjs">
+								<option id="xilinx.gnu.c.link.option.userobjs.1309253696" name="Other Objects" superClass="xilinx.gnu.c.link.option.userobjs" valueType="userObjs">
 									<listOptionValue builtIn="false" value="../lib/libcurl.a"/>
 									<listOptionValue builtIn="false" value="../lib/lpp.a"/>
 								</option>
