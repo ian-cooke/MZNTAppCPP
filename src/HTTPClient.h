@@ -17,13 +17,13 @@ class UploadTask : public Task
     UploadTask( string filename, unsigned long offset, unsigned long size,
           string fullRemotePath, int port)
     {
-        cout << "Created new UploadTask for: " << fullRemotePath << endl;
         m_localFilename = filename;
         m_upParams.offset = offset;
         m_upParams.uploadSize = size;
         m_upParams.total = 0;
         m_port = port;
         m_fullRemotePath = fullRemotePath;
+        cout << "Created new UploadTask for: " << m_fullRemotePath << endl;
     }
 
     ~UploadTask()

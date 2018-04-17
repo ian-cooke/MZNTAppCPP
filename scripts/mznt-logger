@@ -4,11 +4,6 @@
 MZ_PATH="/mnt/MZNTAppCPP.elf"
 MZ_OPTS=""
 
-HTTP_HOST=gnssfast.colorado.edu
-UPLOAD_PORT=1337
-MQTT_HOST=gnssfast.colorado.edu
-MQTT_PORT=5554
-
 MZ_NAME="MZNTLogger"
 PIDFILE=/var/run/$MZ_NAME.pid
 
@@ -38,8 +33,10 @@ start)
         echo $MZ_NAME
         echo $TEST_NAME
 		echo $RUNTIME
+		echo "HTTP Host: $HTTP_HOST $HTTP_PORT"
+		echo "MQTT Host: $MQTT_HOST $MQTT_PORT"
 
-        MZ_OPTS+="-o /mnt/$MZ_NAME.$TEST_NAME.IF -q /mnt/$MZ_NAME.$TEST_NAME.AGC -N $MZ_NAME -s $RUNTIME -S -c /etc/ConfigSet01.txt"
+        MZ_OPTS+="-o /mnt/$MZ_NAME.$TEST_NAME.IF -q /mnt/$MZ_NAME.$TEST_NAME.AGC -N $MZ_NAME -s $RUNTIME -S -c /etc/ConfigSet01.txt -h $HTTP_HOST -p $HTTP_PORT -m $MQTT_HOST -P $MQTT_PORT -t 0x00000000"
 	else
 	  echo "---------------MZNTLogger ERROR: No drive mounted.--------------"
 	fi

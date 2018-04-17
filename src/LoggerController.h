@@ -72,6 +72,7 @@ private:
     unsigned long m_numPreBytes;
     unsigned long m_numUpdateBytes;
     unsigned long m_numPostBytes;
+    unsigned long m_ephSize;
 
     unsigned long m_uploadRefactory;
     unsigned long m_bytesWrittenAGC;

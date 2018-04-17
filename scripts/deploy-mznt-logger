@@ -1,1 +1,5 @@
-cp ./mznt-logger /media/chris/ADATA/Petalinux/mznt_os_174/project-spec/meta-user/recipes-apps/mznt-logger
+#!/bin/bash
+
+# Copy the current logger script into the directory
+cp ./mznt-logger /media/chris/ADATA/Petalinux/mznt_os_174/project-spec/meta-user/recipes-apps/mznt-logger/files/mznt-logger
+cat /media/chris/ADATA/Petalinux/mznt_os_174/project-spec/meta-user/recipes-apps/mznt-logger/files/mznt-logger

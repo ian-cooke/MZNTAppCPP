@@ -53,7 +53,7 @@ void UploadTask::Run()
 
         /* enable verbose for easier tracing */
         //curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-
+        cout << "Setting url to " << m_fullRemotePath.c_str() << endl;
         curl_easy_setopt(curl, CURLOPT_URL, m_fullRemotePath.c_str() );
         cout << "Setting upload size to " << dec << (curl_off_t)m_upParams.uploadSize<< endl;
         curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)m_upParams.uploadSize );

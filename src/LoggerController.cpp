@@ -42,6 +42,7 @@ LoggerController::LoggerController(string nodeName, string ifFilename, string ag
 
 	m_numPreBytes = (numPreBytes / BUFFER_BYTESIZE) * BUFFER_BYTESIZE;
 	m_numPostBytes = (numPostBytes / BUFFER_BYTESIZE) * BUFFER_BYTESIZE;
+	m_ephSize = 120000000;
 	//m_uploading = false;
 	m_stopCond = false;
 
@@ -352,26 +353,48 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 	}
 
 	// Check if this is an alert.
-	if (payloadTokens[0] == "update")
+	if (payloadTokens[0] == "update" || payloadTokens[0] == "eph")
 	{
+		if(payloadTokens[0] == "eph" && payloadTokens[2] != m_nodeName){
+			return 0;
+		}
+
 		cout << "Alert Received." << endl;
 		unsigned long currentPos = m_hwMgr.GetCurrFileOffset();
 		unsigned long totalSize = 1;
 		unsigned long offset = 0;
 
 		// Set the params.
-		totalSize = m_numUpdateBytes;
+		if(payloadTokens[0] == "update")
+		{
+			totalSize = m_numUpdateBytes;
+		}
+		else {
+			totalSize = m_ephSize;
+		}
+
 		offset = currentPos;
 		// target filename.
-		string remoteFilename = m_http_host + "/" + m_nodeName + "/" + "update" + payloadTokens[2];
-		string ifExt = remoteFilename + ".IF.CH_" + payloadTokens[1];
+		string remoteFilename = m_http_host + "/" + m_nodeName + "/";
+
+		if(payloadTokens[0] == "update"){
+			remoteFilename = remoteFilename + "update" + payloadTokens[2];
+		} else {
+			remoteFilename = remoteFilename + "eph";
+		}
+
+		string ifExt = remoteFilename + ".IFCH_" + payloadTokens[1];
 		string agcExt = remoteFilename + ".AGC";
+		
 		string localIF = m_hwMgr.GetIFFilename() + ".CH_" + payloadTokens[1];
 
 		cout << "Upload filename: " << localIF << endl;
 
+		string statusMsg = "status_update-" + m_nodeName + "-recvupdate";
+		m_mqttCtlr.Publish("leader",statusMsg,0);
+
 		// Wait for enough bytes.
-		while (m_hwMgr.GetCurrFileOffset() < currentPos + m_numUpdateBytes)
+		while (m_hwMgr.GetCurrFileOffset() < currentPos + totalSize)
 		{
 			if (m_hwMgr.GetCurrFileOffset() < currentPos)
 			{
@@ -381,14 +404,21 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 			}
 		}
 
+		statusMsg = "status_update-" + m_nodeName + "-startupload";
+		m_mqttCtlr.Publish("leader",statusMsg,0);
+
 		// Perform upload.
 		if (!m_httpClient.upload(ifExt, localIF.c_str(), m_http_port, offset, totalSize, true, true))
 		{
 			cerr << "Error uploading IF data!" << endl;
+			statusMsg = "status_update-" + m_nodeName + "-uploadfail_if";
+			m_mqttCtlr.Publish("leader",statusMsg,0);
 		}
 		if (!m_httpClient.upload(agcExt, m_agcFilename, m_http_port, 0, m_bytesWrittenAGC, true, false))
 		{
 			cerr << "Error uploading AGC." << endl;
+			statusMsg = "status_update-" + m_nodeName + "-uploadfail_agc";
+			m_mqttCtlr.Publish("leader",statusMsg,0);
 		}
 	}
 
@@ -421,6 +451,7 @@ int LoggerController::MQTT_Callback(void *context, char *topicName, int topicLen
 		chrono::duration<double> timeDiff = profileEnd - m_profilePoint;
 		cout << "Round trip MQTT msg took: " << timeDiff.count() << endl;
 	}
+
 
 	//---------------------------------------------------------------------------------------
 	// Depracted Msgs
