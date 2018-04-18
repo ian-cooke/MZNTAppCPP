@@ -37,29 +37,29 @@ endif
 
 # Add inputs and outputs from these tool invocations to the build variables 
 ELFSIZE += \
-MZNTAppCPP.elf.size \
+MZNTCpp.elf.size \
 
 
 # All Target
-all: MZNTAppCPP.elf secondary-outputs
+all: MZNTCpp.elf secondary-outputs
 
 # Tool invocations
-MZNTAppCPP.elf: $(OBJS)  $(USER_OBJS)
+MZNTCpp.elf: $(OBJS)  $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: ARM v7 Linux g++ linker'
-	arm-linux-gnueabihf-g++  -o "MZNTAppCPP.elf" $(OBJS) $(USER_OBJS) $(LIBS)
+	arm-linux-gnueabihf-g++  -o "MZNTCpp.elf" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
-MZNTAppCPP.elf.size: MZNTAppCPP.elf
+MZNTCpp.elf.size: MZNTCpp.elf
 	@echo 'Invoking: ARM v7 Linux Print Size'
-	arm-linux-gnueabihf-size MZNTAppCPP.elf  |tee "MZNTAppCPP.elf.size"
+	arm-linux-gnueabihf-size MZNTCpp.elf  |tee "MZNTCpp.elf.size"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) $(CC_DEPS)$(EXECUTABLES)$(OBJS)$(C_UPPER_DEPS)$(CXX_DEPS)$(S_UPPER_DEPS)$(C_DEPS)$(CPP_DEPS)$(ELFSIZE) MZNTAppCPP.elf
+	-$(RM) $(CC_DEPS)$(EXECUTABLES)$(OBJS)$(C_UPPER_DEPS)$(CXX_DEPS)$(S_UPPER_DEPS)$(C_DEPS)$(CPP_DEPS)$(ELFSIZE) MZNTCpp.elf
 	-@echo ' '
 
 secondary-outputs: $(ELFSIZE)
